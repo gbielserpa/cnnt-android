@@ -1,0 +1,710 @@
+package com.cnnt.app.canvas
+
+import android.annotation.SuppressLint
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.PointF
+import android.graphics.RectF
+import android.util.AttributeSet
+import android.view.MotionEvent
+import android.view.ScaleGestureDetector
+import android.view.View
+import com.cnnt.app.data.model.Board
+import com.cnnt.app.data.model.BrushPreset
+import com.cnnt.app.data.model.Layer
+import com.cnnt.app.data.model.SpatialObject
+import com.cnnt.app.data.model.Stroke
+import com.cnnt.app.data.model.StrokePoint
+import com.cnnt.app.ink.InkEngine
+import kotlin.math.abs
+
+class InfiniteCanvasView @JvmOverloads constructor(
+    context: Context,
+    attrs: AttributeSet? = null,
+    defStyleAttr: Int = 0
+) : View(context, attrs, defStyleAttr) {
+
+    interface CanvasListener {
+        fun onStrokeCompleted(stroke: Stroke)
+        fun onStrokeErased(strokeId: String)
+        fun onObjectSelected(obj: SpatialObject?)
+        fun onObjectMoved(obj: SpatialObject, newX: Float, newY: Float)
+        fun onCanvasTransformChanged(scale: Float, translateX: Float, translateY: Float)
+    }
+
+    var listener: CanvasListener? = null
+
+    // Canvas transform
+    private val canvasMatrix = Matrix()
+    private val inverseMatrix = Matrix()
+    private var scale = 1f
+    private var translateX = 0f
+    private var translateY = 0f
+    private val minScale = 0.1f
+    private val maxScale = 10f
+
+    // Drawing state
+    private var currentMode: CanvasMode = CanvasMode.DRAW
+    private var currentStroke: Stroke? = null
+    private var currentBrush: BrushPreset = BrushPreset.gelPen()
+    private var currentColor: Int = Color.WHITE
+    private var currentSize: Float = 4f
+    private var currentOpacity: Float = 1.0f
+
+    // Board data
+    private var board: Board? = null
+
+    // Engine
+    private val inkEngine = InkEngine()
+
+    // Gesture handling
+    private var isPanning = false
+    private var isDrawing = false
+    private var lastTouchX = 0f
+    private var lastTouchY = 0f
+    private var activeStylusId = -1
+
+    // Multi-touch zoom
+    private val scaleDetector: ScaleGestureDetector
+    private var isScaling = false
+
+    // Eraser
+    private var eraserRadius = 20f
+
+    // Selection
+    private var selectedObject: SpatialObject? = null
+    private var isDraggingObject = false
+    private var dragOffsetX = 0f
+    private var dragOffsetY = 0f
+
+    // Lasso selection
+    private val lassoPoints = mutableListOf<PointF>()
+    private var isLassoing = false
+
+    // Palm rejection
+    private var palmRejectionEnabled = true
+    private var fingerDrawingEnabled = false
+
+    // Undo/Redo
+    private val undoStack = mutableListOf<CanvasAction>()
+    private val redoStack = mutableListOf<CanvasAction>()
+
+    // Background
+    private val bgPaint = Paint().apply {
+        color = 0xFF1E1E1E.toInt()
+        style = Paint.Style.FILL
+    }
+
+    // Grid paint (subtle)
+    private val gridPaint = Paint().apply {
+        color = 0x11FFFFFF
+        style = Paint.Style.STROKE
+        strokeWidth = 0.5f
+    }
+
+    // Layer cache
+    private var layerCache: Bitmap? = null
+    private var cacheValid = false
+
+    init {
+        scaleDetector = ScaleGestureDetector(context, ScaleListener())
+        setLayerType(LAYER_TYPE_HARDWARE, null)
+    }
+
+    fun setBoard(board: Board) {
+        this.board = board
+        bgPaint.color = board.backgroundColor
+        invalidateCache()
+        invalidate()
+    }
+
+    fun setMode(mode: CanvasMode) {
+        currentMode = mode
+        if (mode != CanvasMode.SELECT) {
+            selectedObject = null
+            listener?.onObjectSelected(null)
+        }
+    }
+
+    fun setBrush(brush: BrushPreset) {
+        currentBrush = brush
+    }
+
+    fun setDrawColor(color: Int) {
+        currentColor = color
+    }
+
+    fun setDrawSize(size: Float) {
+        currentSize = size
+    }
+
+    fun setDrawOpacity(opacity: Float) {
+        currentOpacity = opacity
+    }
+
+    fun setPalmRejection(enabled: Boolean) {
+        palmRejectionEnabled = enabled
+    }
+
+    fun setFingerDrawing(enabled: Boolean) {
+        fingerDrawingEnabled = enabled
+    }
+
+    fun setEraserRadius(radius: Float) {
+        eraserRadius = radius
+    }
+
+    fun undo() {
+        if (undoStack.isEmpty()) return
+        val action = undoStack.removeAt(undoStack.size - 1)
+        redoStack.add(action)
+        when (action) {
+            is CanvasAction.AddStroke -> {
+                board?.activeLayer?.strokes?.removeAll { it.id == action.stroke.id }
+            }
+            is CanvasAction.RemoveStroke -> {
+                board?.activeLayer?.strokes?.add(action.stroke)
+            }
+            is CanvasAction.MoveObject -> {
+                val obj = board?.activeLayer?.objects?.find { it.id == action.objectId }
+                if (obj != null) {
+                    val idx = board!!.activeLayer.objects.indexOf(obj)
+                    board!!.activeLayer.objects[idx] = obj.copy(x = action.oldX, y = action.oldY)
+                }
+            }
+        }
+        invalidateCache()
+        invalidate()
+    }
+
+    fun redo() {
+        if (redoStack.isEmpty()) return
+        val action = redoStack.removeAt(redoStack.size - 1)
+        undoStack.add(action)
+        when (action) {
+            is CanvasAction.AddStroke -> {
+                board?.activeLayer?.strokes?.add(action.stroke)
+            }
+            is CanvasAction.RemoveStroke -> {
+                board?.activeLayer?.strokes?.removeAll { it.id == action.stroke.id }
+            }
+            is CanvasAction.MoveObject -> {
+                val obj = board?.activeLayer?.objects?.find { it.id == action.objectId }
+                if (obj != null) {
+                    val idx = board!!.activeLayer.objects.indexOf(obj)
+                    board!!.activeLayer.objects[idx] = obj.copy(x = action.newX, y = action.newY)
+                }
+            }
+        }
+        invalidateCache()
+        invalidate()
+    }
+
+    fun canUndo(): Boolean = undoStack.isNotEmpty()
+    fun canRedo(): Boolean = redoStack.isNotEmpty()
+
+    fun resetView() {
+        scale = 1f
+        translateX = 0f
+        translateY = 0f
+        updateMatrix()
+        invalidate()
+    }
+
+    fun zoomToFit() {
+        val board = this.board ?: return
+        val allStrokes = board.activeLayer.strokes
+        if (allStrokes.isEmpty()) {
+            resetView()
+            return
+        }
+        var minX = Float.MAX_VALUE
+        var minY = Float.MAX_VALUE
+        var maxX = Float.MIN_VALUE
+        var maxY = Float.MIN_VALUE
+        for (stroke in allStrokes) {
+            val bounds = stroke.getBounds()
+            if (bounds[0] < minX) minX = bounds[0]
+            if (bounds[1] < minY) minY = bounds[1]
+            if (bounds[2] > maxX) maxX = bounds[2]
+            if (bounds[3] > maxY) maxY = bounds[3]
+        }
+        val contentWidth = maxX - minX
+        val contentHeight = maxY - minY
+        if (contentWidth <= 0 || contentHeight <= 0) return
+
+        val padding = 50f
+        val scaleX = (width - padding * 2) / contentWidth
+        val scaleY = (height - padding * 2) / contentHeight
+        scale = minOf(scaleX, scaleY, maxScale)
+        translateX = width / 2f - (minX + contentWidth / 2f) * scale
+        translateY = height / 2f - (minY + contentHeight / 2f) * scale
+        updateMatrix()
+        invalidate()
+    }
+
+    private fun updateMatrix() {
+        canvasMatrix.reset()
+        canvasMatrix.postTranslate(translateX, translateY)
+        canvasMatrix.postScale(scale, scale, width / 2f, height / 2f)
+        canvasMatrix.invert(inverseMatrix)
+        listener?.onCanvasTransformChanged(scale, translateX, translateY)
+    }
+
+    private fun screenToCanvas(x: Float, y: Float): PointF {
+        val pts = floatArrayOf(x, y)
+        inverseMatrix.mapPoints(pts)
+        return PointF(pts[0], pts[1])
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        scaleDetector.onTouchEvent(event)
+        if (isScaling) return true
+
+        val toolType = event.getToolType(0)
+        val isStylusInput = toolType == MotionEvent.TOOL_TYPE_STYLUS
+        val isEraserInput = toolType == MotionEvent.TOOL_TYPE_ERASER
+        val isFingerInput = toolType == MotionEvent.TOOL_TYPE_FINGER
+
+        // Palm rejection: finger = pan only (unless finger drawing enabled)
+        if (isFingerInput && palmRejectionEnabled && !fingerDrawingEnabled) {
+            return handlePan(event)
+        }
+
+        // Eraser tool from stylus button or eraser end
+        if (isEraserInput || (isStylusInput && currentMode == CanvasMode.ERASE)) {
+            return handleErase(event)
+        }
+
+        when (currentMode) {
+            CanvasMode.DRAW -> return handleDraw(event, isStylusInput || isFingerInput)
+            CanvasMode.ERASE -> return handleErase(event)
+            CanvasMode.SELECT -> return handleSelect(event)
+            CanvasMode.LASSO -> return handleLasso(event)
+            CanvasMode.PAN -> return handlePan(event)
+            CanvasMode.INSERT -> return handleInsert(event)
+        }
+        return true
+    }
+
+    private fun handleDraw(event: MotionEvent, validInput: Boolean): Boolean {
+        if (!validInput) return handlePan(event)
+
+        val canvasPoint = screenToCanvas(event.x, event.y)
+
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                isDrawing = true
+                val stroke = Stroke(
+                    brushId = currentBrush.id,
+                    color = currentColor,
+                    size = currentSize,
+                    opacity = currentOpacity,
+                    layerId = board?.activeLayer?.id ?: ""
+                )
+                // Process historical points for smoother strokes
+                for (h in 0 until event.historySize) {
+                    val hp = screenToCanvas(event.getHistoricalX(h), event.getHistoricalY(h))
+                    stroke.addPoint(StrokePoint(
+                        x = hp.x, y = hp.y,
+                        pressure = event.getHistoricalPressure(h),
+                        tiltX = event.getHistoricalAxisValue(MotionEvent.AXIS_TILT, h),
+                        orientation = event.getHistoricalAxisValue(MotionEvent.AXIS_ORIENTATION, h),
+                        timestamp = event.getHistoricalEventTime(h)
+                    ))
+                }
+                stroke.addPoint(StrokePoint(
+                    x = canvasPoint.x, y = canvasPoint.y,
+                    pressure = event.pressure,
+                    tiltX = event.getAxisValue(MotionEvent.AXIS_TILT),
+                    orientation = event.getAxisValue(MotionEvent.AXIS_ORIENTATION),
+                    timestamp = event.eventTime
+                ))
+                currentStroke = stroke
+                invalidate()
+            }
+            MotionEvent.ACTION_MOVE -> {
+                currentStroke?.let { stroke ->
+                    for (h in 0 until event.historySize) {
+                        val hp = screenToCanvas(event.getHistoricalX(h), event.getHistoricalY(h))
+                        stroke.addPoint(StrokePoint(
+                            x = hp.x, y = hp.y,
+                            pressure = event.getHistoricalPressure(h),
+                            tiltX = event.getHistoricalAxisValue(MotionEvent.AXIS_TILT, h),
+                            orientation = event.getHistoricalAxisValue(MotionEvent.AXIS_ORIENTATION, h),
+                            timestamp = event.getHistoricalEventTime(h)
+                        ))
+                    }
+                    stroke.addPoint(StrokePoint(
+                        x = canvasPoint.x, y = canvasPoint.y,
+                        pressure = event.pressure,
+                        tiltX = event.getAxisValue(MotionEvent.AXIS_TILT),
+                        orientation = event.getAxisValue(MotionEvent.AXIS_ORIENTATION),
+                        timestamp = event.eventTime
+                    ))
+                    invalidate()
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                currentStroke?.let { stroke ->
+                    if (!stroke.isEmpty()) {
+                        board?.activeLayer?.strokes?.add(stroke)
+                        undoStack.add(CanvasAction.AddStroke(stroke))
+                        redoStack.clear()
+                        listener?.onStrokeCompleted(stroke)
+                        invalidateCache()
+                    }
+                }
+                currentStroke = null
+                isDrawing = false
+                invalidate()
+            }
+        }
+        return true
+    }
+
+    private fun handleErase(event: MotionEvent): Boolean {
+        val canvasPoint = screenToCanvas(event.x, event.y)
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                val layer = board?.activeLayer ?: return true
+                val toRemove = mutableListOf<Stroke>()
+                for (stroke in layer.strokes) {
+                    if (inkEngine.isPointNearStroke(stroke, canvasPoint.x, canvasPoint.y, eraserRadius / scale)) {
+                        toRemove.add(stroke)
+                    }
+                }
+                for (stroke in toRemove) {
+                    layer.strokes.remove(stroke)
+                    undoStack.add(CanvasAction.RemoveStroke(stroke))
+                    redoStack.clear()
+                    listener?.onStrokeErased(stroke.id)
+                }
+                if (toRemove.isNotEmpty()) {
+                    invalidateCache()
+                    invalidate()
+                }
+            }
+        }
+        return true
+    }
+
+    private fun handleSelect(event: MotionEvent): Boolean {
+        val canvasPoint = screenToCanvas(event.x, event.y)
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                val layer = board?.activeLayer ?: return true
+                var found: SpatialObject? = null
+                for (obj in layer.objects.reversed()) {
+                    if (canvasPoint.x >= obj.x && canvasPoint.x <= obj.x + obj.width &&
+                        canvasPoint.y >= obj.y && canvasPoint.y <= obj.y + obj.height) {
+                        found = obj
+                        break
+                    }
+                }
+                selectedObject = found
+                listener?.onObjectSelected(found)
+                if (found != null && !found.locked) {
+                    isDraggingObject = true
+                    dragOffsetX = canvasPoint.x - found.x
+                    dragOffsetY = canvasPoint.y - found.y
+                }
+                invalidate()
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (isDraggingObject && selectedObject != null) {
+                    val newX = canvasPoint.x - dragOffsetX
+                    val newY = canvasPoint.y - dragOffsetY
+                    val obj = selectedObject!!
+                    val idx = board!!.activeLayer.objects.indexOf(obj)
+                    if (idx >= 0) {
+                        val oldX = obj.x
+                        val oldY = obj.y
+                        val updated = obj.copy(x = newX, y = newY)
+                        board!!.activeLayer.objects[idx] = updated
+                        selectedObject = updated
+                        undoStack.add(CanvasAction.MoveObject(obj.id, oldX, oldY, newX, newY))
+                    }
+                    invalidate()
+                }
+            }
+            MotionEvent.ACTION_UP -> {
+                if (isDraggingObject && selectedObject != null) {
+                    listener?.onObjectMoved(selectedObject!!, selectedObject!!.x, selectedObject!!.y)
+                }
+                isDraggingObject = false
+            }
+        }
+        return true
+    }
+
+    private fun handleLasso(event: MotionEvent): Boolean {
+        val canvasPoint = screenToCanvas(event.x, event.y)
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                lassoPoints.clear()
+                lassoPoints.add(canvasPoint)
+                isLassoing = true
+                invalidate()
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (isLassoing) {
+                    lassoPoints.add(canvasPoint)
+                    invalidate()
+                }
+            }
+            MotionEvent.ACTION_UP -> {
+                isLassoing = false
+                // TODO: select strokes inside lasso polygon
+                invalidate()
+            }
+        }
+        return true
+    }
+
+    private fun handlePan(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                isPanning = true
+                lastTouchX = event.x
+                lastTouchY = event.y
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (isPanning && event.pointerCount == 1) {
+                    val dx = event.x - lastTouchX
+                    val dy = event.y - lastTouchY
+                    translateX += dx
+                    translateY += dy
+                    lastTouchX = event.x
+                    lastTouchY = event.y
+                    updateMatrix()
+                    invalidate()
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                isPanning = false
+            }
+        }
+        return true
+    }
+
+    private fun handleInsert(event: MotionEvent): Boolean {
+        // Insert mode: tap to place a new block
+        if (event.actionMasked == MotionEvent.ACTION_UP) {
+            val canvasPoint = screenToCanvas(event.x, event.y)
+            // Notify listener to insert block at this position
+        }
+        return true
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+
+        // Background
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
+
+        // Apply canvas transform
+        canvas.save()
+        canvas.concat(canvasMatrix)
+
+        // Draw grid
+        drawGrid(canvas)
+
+        // Draw layers
+        board?.let { board ->
+            for (layer in board.layers) {
+                if (!layer.visible) continue
+                drawLayer(canvas, layer)
+            }
+        }
+
+        // Draw current stroke in progress
+        currentStroke?.let { stroke ->
+            inkEngine.renderStroke(canvas, stroke, currentBrush)
+        }
+
+        // Draw lasso
+        if (isLassoing && lassoPoints.size > 1) {
+            val lassoPaint = Paint().apply {
+                color = 0xFF00B0FF.toInt()
+                style = Paint.Style.STROKE
+                strokeWidth = 2f / scale
+                pathEffect = android.graphics.DashPathEffect(floatArrayOf(10f / scale, 5f / scale), 0f)
+            }
+            for (i in 1 until lassoPoints.size) {
+                canvas.drawLine(
+                    lassoPoints[i - 1].x, lassoPoints[i - 1].y,
+                    lassoPoints[i].x, lassoPoints[i].y, lassoPaint
+                )
+            }
+        }
+
+        // Draw selection indicator
+        selectedObject?.let { obj ->
+            val selectPaint = Paint().apply {
+                color = 0xFF00B0FF.toInt()
+                style = Paint.Style.STROKE
+                strokeWidth = 2f / scale
+            }
+            canvas.drawRect(obj.x, obj.y, obj.x + obj.width, obj.y + obj.height, selectPaint)
+            // Draw resize handles
+            val handleSize = 8f / scale
+            val handlePaint = Paint().apply {
+                color = 0xFF00B0FF.toInt()
+                style = Paint.Style.FILL
+            }
+            canvas.drawRect(obj.x - handleSize, obj.y - handleSize, obj.x + handleSize, obj.y + handleSize, handlePaint)
+            canvas.drawRect(obj.x + obj.width - handleSize, obj.y - handleSize, obj.x + obj.width + handleSize, obj.y + handleSize, handlePaint)
+            canvas.drawRect(obj.x - handleSize, obj.y + obj.height - handleSize, obj.x + handleSize, obj.y + obj.height + handleSize, handlePaint)
+            canvas.drawRect(obj.x + obj.width - handleSize, obj.y + obj.height - handleSize, obj.x + obj.width + handleSize, obj.y + obj.height + handleSize, handlePaint)
+        }
+
+        canvas.restore()
+    }
+
+    private fun drawGrid(canvas: Canvas) {
+        val gridSize = 50f
+        val visibleRect = getVisibleCanvasRect()
+        val startX = (visibleRect.left / gridSize).toInt() * gridSize
+        val startY = (visibleRect.top / gridSize).toInt() * gridSize
+
+        var x = startX
+        while (x <= visibleRect.right) {
+            canvas.drawLine(x, visibleRect.top, x, visibleRect.bottom, gridPaint)
+            x += gridSize
+        }
+        var y = startY
+        while (y <= visibleRect.bottom) {
+            canvas.drawLine(visibleRect.left, y, visibleRect.right, y, gridPaint)
+            y += gridSize
+        }
+    }
+
+    private fun drawLayer(canvas: Canvas, layer: Layer) {
+        val alpha = (layer.opacity * 255).toInt()
+
+        // Draw spatial objects
+        for (obj in layer.objects) {
+            drawSpatialObject(canvas, obj, alpha)
+        }
+
+        // Draw strokes
+        for (stroke in layer.strokes) {
+            val brush = getBrushForStroke(stroke)
+            inkEngine.renderStroke(canvas, stroke, brush)
+        }
+    }
+
+    private fun drawSpatialObject(canvas: Canvas, obj: SpatialObject, layerAlpha: Int) {
+        val objPaint = Paint().apply {
+            color = obj.style.backgroundColor
+            alpha = layerAlpha
+            style = Paint.Style.FILL
+        }
+        val borderPaint = Paint().apply {
+            color = obj.style.borderColor
+            alpha = layerAlpha
+            style = Paint.Style.STROKE
+            strokeWidth = obj.style.borderWidth
+        }
+
+        val rect = RectF(obj.x, obj.y, obj.x + obj.width, obj.y + obj.height)
+        val cr = obj.style.cornerRadius
+
+        if (obj.style.backgroundColor != 0) {
+            canvas.drawRoundRect(rect, cr, cr, objPaint)
+        }
+        canvas.drawRoundRect(rect, cr, cr, borderPaint)
+
+        // Render content preview
+        when (val content = obj.content) {
+            is com.cnnt.app.data.model.ObjectContent.Text -> {
+                val textPaint = Paint().apply {
+                    color = content.fontColor
+                    textSize = content.fontSize
+                    isAntiAlias = true
+                }
+                val padding = obj.style.padding
+                canvas.drawText(
+                    content.text,
+                    obj.x + padding,
+                    obj.y + padding + content.fontSize,
+                    textPaint
+                )
+            }
+            is com.cnnt.app.data.model.ObjectContent.Checklist -> {
+                val textPaint = Paint().apply {
+                    color = 0xFFE0E0E0.toInt()
+                    textSize = 12f
+                    isAntiAlias = true
+                }
+                var yOffset = obj.y + obj.style.padding + 14f
+                for (item in content.items.take(5)) {
+                    val prefix = if (item.checked) "☑ " else "☐ "
+                    canvas.drawText(prefix + item.text, obj.x + obj.style.padding, yOffset, textPaint)
+                    yOffset += 18f
+                }
+            }
+            else -> {}
+        }
+    }
+
+    private fun getBrushForStroke(stroke: Stroke): BrushPreset {
+        return BrushPreset.defaultBrushes().find { it.id == stroke.brushId } ?: BrushPreset.gelPen()
+    }
+
+    private fun getVisibleCanvasRect(): RectF {
+        val topLeft = screenToCanvas(0f, 0f)
+        val bottomRight = screenToCanvas(width.toFloat(), height.toFloat())
+        return RectF(topLeft.x, topLeft.y, bottomRight.x, bottomRight.y)
+    }
+
+    private fun invalidateCache() {
+        cacheValid = false
+    }
+
+    private inner class ScaleListener : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+        override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+            isScaling = true
+            return true
+        }
+
+        override fun onScale(detector: ScaleGestureDetector): Boolean {
+            val newScale = (scale * detector.scaleFactor).coerceIn(minScale, maxScale)
+            val focusX = detector.focusX
+            val focusY = detector.focusY
+
+            translateX += (focusX - width / 2f) * (1 - detector.scaleFactor)
+            translateY += (focusY - height / 2f) * (1 - detector.scaleFactor)
+            scale = newScale
+
+            updateMatrix()
+            invalidate()
+            return true
+        }
+
+        override fun onScaleEnd(detector: ScaleGestureDetector) {
+            isScaling = false
+        }
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        updateMatrix()
+    }
+}
+
+enum class CanvasMode {
+    DRAW, ERASE, SELECT, LASSO, PAN, INSERT
+}
+
+sealed class CanvasAction {
+    data class AddStroke(val stroke: Stroke) : CanvasAction()
+    data class RemoveStroke(val stroke: Stroke) : CanvasAction()
+    data class MoveObject(val objectId: String, val oldX: Float, val oldY: Float, val newX: Float, val newY: Float) : CanvasAction()
+}

@@ -1,0 +1,301 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.drawerlayout.widget.DrawerLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/drawerLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="false">
+
+    <!-- Main content -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#1E1E1E">
+
+        <!-- Infinite Canvas -->
+        <com.cnnt.app.canvas.InfiniteCanvasView
+            android:id="@+id/canvasView"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <!-- Top Toolbar (Estojo Superior) -->
+        <LinearLayout
+            android:id="@+id/toolbarContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="4dp"
+            android:background="@drawable/toolbar_background"
+            android:elevation="4dp"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <!-- Brush button -->
+            <Button
+                android:id="@+id/btnBrush"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:minWidth="60dp"
+                android:text="Caneta"
+                android:textSize="11sp"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/btn_tool"
+                android:layout_marginEnd="4dp" />
+
+            <!-- Color button -->
+            <Button
+                android:id="@+id/btnColor"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="@drawable/color_indicator"
+                android:layout_marginEnd="4dp" />
+
+            <!-- Size slider -->
+            <SeekBar
+                android:id="@+id/sizeSlider"
+                android:layout_width="80dp"
+                android:layout_height="32dp"
+                android:max="100"
+                android:progress="20"
+                android:progressTint="#FFFFFF"
+                android:thumbTint="#00B0FF"
+                android:layout_marginEnd="4dp" />
+
+            <!-- Eraser -->
+            <Button
+                android:id="@+id/btnEraser"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:text="⌫"
+                android:textSize="16sp"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/btn_tool"
+                android:layout_marginEnd="4dp" />
+
+            <!-- Select -->
+            <Button
+                android:id="@+id/btnSelect"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:text="◻"
+                android:textSize="16sp"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/btn_tool"
+                android:layout_marginEnd="4dp" />
+
+            <!-- Lasso -->
+            <Button
+                android:id="@+id/btnLasso"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:text="⭕"
+                android:textSize="12sp"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/btn_tool"
+                android:layout_marginEnd="4dp" />
+
+            <!-- Undo -->
+            <Button
+                android:id="@+id/btnUndo"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:text="↩"
+                android:textSize="16sp"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/btn_tool"
+                android:layout_marginEnd="4dp" />
+
+            <!-- Redo -->
+            <Button
+                android:id="@+id/btnRedo"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:text="↪"
+                android:textSize="16sp"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/btn_tool"
+                android:layout_marginEnd="8dp" />
+
+            <!-- OCR -->
+            <Button
+                android:id="@+id/btnOcr"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:minWidth="44dp"
+                android:text="OCR"
+                android:textSize="10sp"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/btn_tool"
+                android:layout_marginEnd="4dp" />
+
+            <!-- Flashcard -->
+            <Button
+                android:id="@+id/btnFlashcard"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:text="📇"
+                android:textSize="14sp"
+                android:background="@drawable/btn_tool"
+                android:layout_marginEnd="4dp" />
+
+            <!-- Export -->
+            <Button
+                android:id="@+id/btnExport"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:text="📤"
+                android:textSize="14sp"
+                android:background="@drawable/btn_tool"
+                android:layout_marginEnd="4dp" />
+
+            <!-- Focus mode -->
+            <Button
+                android:id="@+id/btnFocus"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:text="⊙"
+                android:textSize="16sp"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/btn_tool" />
+
+        </LinearLayout>
+
+        <!-- Sidebar toggle -->
+        <Button
+            android:id="@+id/sidebarToggle"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginTop="64dp"
+            android:text="☰"
+            android:textSize="16sp"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/btn_tool"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- Sidebar (Left Drawer) -->
+    <LinearLayout
+        android:layout_width="280dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"
+        android:orientation="vertical"
+        android:background="#252525"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Biblioteca"
+            android:textSize="18sp"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Pages list -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Páginas"
+            android:textSize="14sp"
+            android:textColor="#AAAAAA"
+            android:layout_marginBottom="8dp" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/pageList"
+            android:layout_width="match_parent"
+            android:layout_height="120dp"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/btnAddPage"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:text="+ Nova Página"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:background="@drawable/btn_tool"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Insert blocks -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Inserir Bloco"
+            android:textSize="14sp"
+            android:textColor="#AAAAAA"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/btnInsertText"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:text="📝 Texto"
+            android:textSize="12sp"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/btn_tool"
+            android:layout_marginBottom="4dp"
+            android:gravity="start|center_vertical"
+            android:paddingStart="12dp" />
+
+        <Button
+            android:id="@+id/btnInsertChecklist"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:text="☑ Checklist"
+            android:textSize="12sp"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/btn_tool"
+            android:layout_marginBottom="4dp"
+            android:gravity="start|center_vertical"
+            android:paddingStart="12dp" />
+
+        <Button
+            android:id="@+id/btnInsertImage"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:text="🖼 Imagem"
+            android:textSize="12sp"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/btn_tool"
+            android:layout_marginBottom="4dp"
+            android:gravity="start|center_vertical"
+            android:paddingStart="12dp" />
+
+        <Button
+            android:id="@+id/btnInsertPdf"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:text="📄 PDF"
+            android:textSize="12sp"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/btn_tool"
+            android:layout_marginBottom="4dp"
+            android:gravity="start|center_vertical"
+            android:paddingStart="12dp" />
+
+        <Button
+            android:id="@+id/btnInsertLink"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:text="🔗 Link"
+            android:textSize="12sp"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/btn_tool"
+            android:layout_marginBottom="4dp"
+            android:gravity="start|center_vertical"
+            android:paddingStart="12dp" />
+
+    </LinearLayout>
+
+</androidx.drawerlayout.widget.DrawerLayout>
