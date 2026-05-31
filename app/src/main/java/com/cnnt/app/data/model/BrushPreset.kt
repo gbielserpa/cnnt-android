@@ -85,10 +85,10 @@ data class BrushPreset(
 
         fun cnntSpecial() = BrushPreset(
             id = CNNT_SPECIAL_ID, name = "Pincel CNNT",
-            category = BrushCategory.SPECIAL, baseSize = 10f,
-            pressureSensitivity = 1.0f, smoothing = 0.5f,
-            tipShape = TipShape.CHISEL, directionSensitivity = 0.8f,
-            tiltSensitivity = 0.6f, velocitySensitivity = 0.5f,
+            category = BrushCategory.SPECIAL, baseSize = 14f,
+            pressureSensitivity = 1.2f, smoothing = 0.4f,
+            tipShape = TipShape.CHISEL, directionSensitivity = 1.0f,
+            tiltSensitivity = 0.8f, velocitySensitivity = 0.3f,
             startBehavior = StrokeBehavior.SMOOTH_TAPER,
             endBehavior = StrokeBehavior.SMOOTH_TAPER
         )

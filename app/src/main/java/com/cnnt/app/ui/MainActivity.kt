@@ -154,10 +154,10 @@ class MainActivity : AppCompatActivity(), InfiniteCanvasView.CanvasListener {
     private fun toggleFocusMode() {
         focusModeActive = !focusModeActive
         if (focusModeActive) {
-            binding.toolbarContainer.visibility = View.GONE
+            binding.toolbarScroll.visibility = View.GONE
             binding.sidebarToggle.visibility = View.GONE
         } else {
-            binding.toolbarContainer.visibility = View.VISIBLE
+            binding.toolbarScroll.visibility = View.VISIBLE
             binding.sidebarToggle.visibility = View.VISIBLE
         }
     }

@@ -120,6 +120,17 @@ class InfiniteCanvasView @JvmOverloads constructor(
     private var previousMode: CanvasMode = CanvasMode.DRAW
     private var stylusButtonDown = false
 
+    // Eraser cursor position (screen coords for visual indicator)
+    private var eraserCursorX = -1f
+    private var eraserCursorY = -1f
+    private var showEraserCursor = false
+    private val eraserCursorPaint = Paint().apply {
+        color = 0xAAFFFFFF.toInt()
+        style = Paint.Style.STROKE
+        strokeWidth = 2f
+        isAntiAlias = true
+    }
+
     // Reusable Paint objects for onDraw (avoid GC pressure)
     private val lassoPaint = Paint().apply {
         color = 0xFF00B0FF.toInt()
@@ -434,6 +445,11 @@ class InfiniteCanvasView @JvmOverloads constructor(
         val canvasPoint = screenToCanvas(event.x, event.y)
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                // Update eraser cursor for visual indicator
+                eraserCursorX = event.x
+                eraserCursorY = event.y
+                showEraserCursor = true
+
                 val layer = board?.activeLayer ?: return true
                 val toRemove = mutableListOf<Stroke>()
                 for (stroke in layer.strokes) {
@@ -447,10 +463,12 @@ class InfiniteCanvasView @JvmOverloads constructor(
                     redoStack.clear()
                     listener?.onStrokeErased(stroke.id)
                 }
-                if (toRemove.isNotEmpty()) {
-                    invalidateCache()
-                    invalidate()
-                }
+                invalidateCache()
+                invalidate()
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                showEraserCursor = false
+                invalidate()
             }
         }
         return true
@@ -614,6 +632,11 @@ class InfiniteCanvasView @JvmOverloads constructor(
         }
 
         canvas.restore()
+
+        // Draw eraser cursor indicator (in screen coords, not canvas coords)
+        if (showEraserCursor && eraserCursorX >= 0) {
+            canvas.drawCircle(eraserCursorX, eraserCursorY, eraserRadius, eraserCursorPaint)
+        }
       } catch (e: Exception) {
           Log.e("CNNT", "onDraw error: ${e.message}", e)
       }

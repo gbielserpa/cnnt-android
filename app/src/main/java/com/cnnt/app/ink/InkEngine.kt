@@ -253,50 +253,70 @@ class InkEngine {
         }
     }
 
-    // --- CNNT Special: direction-based thickness ---
-    // Going DOWN = thick (max width), going UP = thin (min width)
-    // This creates natural handwriting variation like a real fountain pen
+    // --- CNNT Special: Chisel/beveled flat pen for lettering ---
+    // Simulates a flat-tip calligraphy pen held at ~45 degrees
+    // DOWN strokes = THICK (full chisel width), UP strokes = THIN (hairline)
+    // Creates dramatic contrast for classic lettering style
     private fun renderCnntSpecial(canvas: Canvas, stroke: Stroke, brush: BrushPreset, points: List<StrokePoint>) {
-        val smoothed = smoothPoints(points, 0.5f)
+        val smoothed = smoothPoints(points, 0.4f)
         if (smoothed.size < 2) return
 
         val path = Path()
         val topEdge = mutableListOf<Pair<Float, Float>>()
         val bottomEdge = mutableListOf<Pair<Float, Float>>()
 
+        // Chisel angle: 45 degrees (classic calligraphy)
+        val chiselAngle = Math.PI.toFloat() / 4f
+
+        // Smooth the direction factor to avoid jagged transitions
+        var prevDirFactor = 0.5f
+
         for (i in smoothed.indices) {
             val point = smoothed[i]
             val t = i.toFloat() / smoothed.size
             val taper = calculateTaper(t, StrokeBehavior.SMOOTH_TAPER, StrokeBehavior.SMOOTH_TAPER, smoothed.size)
-            val pressure = point.pressure.coerceIn(0.1f, 1f)
+            val pressure = point.pressure.coerceIn(0.2f, 1f)
 
-            // Calculate vertical direction: dy > 0 means going DOWN
+            // Calculate stroke direction
             val dy = if (i > 0) smoothed[i].y - smoothed[i - 1].y
                      else if (smoothed.size > 1) smoothed[1].y - smoothed[0].y else 0f
             val dx = if (i > 0) smoothed[i].x - smoothed[i - 1].x
                      else if (smoothed.size > 1) smoothed[1].x - smoothed[0].x else 0f
 
             val segLen = hypot(dx, dy)
-            // Normalized vertical component: 1.0 = pure downward, -1.0 = pure upward
-            val verticalRatio = if (segLen > 0.01f) (dy / segLen) else 0f
-
-            // dirFactor: 1.0 when going full down, ~0.15 when going full up
-            val dirFactor = (0.15f + 0.85f * ((verticalRatio + 1f) / 2f)).coerceIn(0.15f, 1f)
-
-            val width = stroke.size * pressure * dirFactor * taper * 1.5f
-
-            // Perpendicular to stroke direction
             val angle = atan2(dy.toDouble(), dx.toDouble()).toFloat()
+
+            // Chisel width depends on angle relative to chisel orientation
+            // When stroke is perpendicular to chisel = max width
+            // When stroke is parallel to chisel = min width
+            val chiselFactor = abs(sin(angle + chiselAngle))
+
+            // Vertical emphasis: down strokes get additional width boost
+            val verticalRatio = if (segLen > 0.1f) (dy / segLen) else 0f
+            val downBoost = if (verticalRatio > 0.1f) 1f + verticalRatio * 0.5f else 1f
+
+            // Combined direction factor with DRAMATIC range: 0.08 (hairline) to 1.0 (full width)
+            val rawDirFactor = (0.08f + chiselFactor * 0.92f * downBoost).coerceIn(0.08f, 1.2f)
+
+            // Smooth transitions between thick and thin
+            val dirFactor = prevDirFactor * 0.3f + rawDirFactor * 0.7f
+            prevDirFactor = dirFactor
+
+            // Full chisel width = stroke.size * 2.5 for dramatic effect
+            val width = stroke.size * pressure * dirFactor * taper * 2.5f
+
+            // Chisel tip: perpendicular is offset by chisel angle
             val perpAngle = angle + Math.PI.toFloat() / 2f
-            val halfW = max(width * 0.5f, 0.3f)
+            val chiselPerpAngle = perpAngle + chiselAngle * 0.3f
+            val halfW = max(width * 0.5f, 0.2f)
 
             topEdge.add(Pair(
-                point.x + cos(perpAngle) * halfW,
-                point.y + sin(perpAngle) * halfW
+                point.x + cos(chiselPerpAngle) * halfW,
+                point.y + sin(chiselPerpAngle) * halfW
             ))
             bottomEdge.add(Pair(
-                point.x - cos(perpAngle) * halfW,
-                point.y - sin(perpAngle) * halfW
+                point.x - cos(chiselPerpAngle) * halfW,
+                point.y - sin(chiselPerpAngle) * halfW
             ))
         }
 
