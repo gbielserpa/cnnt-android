@@ -85,6 +85,8 @@ class InfiniteCanvasView @JvmOverloads constructor(
     // Lasso selection
     private val lassoPoints = mutableListOf<PointF>()
     private var isLassoing = false
+    private var lassoMode: LassoMode = LassoMode.FREE
+    private var lassoStartPoint: PointF? = null
 
     // Palm rejection
     private var palmRejectionEnabled = true
@@ -205,6 +207,10 @@ class InfiniteCanvasView @JvmOverloads constructor(
 
     fun setEraserRadius(radius: Float) {
         eraserRadius = radius
+    }
+
+    fun setLassoMode(mode: LassoMode) {
+        lassoMode = mode
     }
 
     fun undo() {
@@ -525,6 +531,14 @@ class InfiniteCanvasView @JvmOverloads constructor(
 
     private fun handleLasso(event: MotionEvent): Boolean {
         val canvasPoint = screenToCanvas(event.x, event.y)
+        when (lassoMode) {
+            LassoMode.FREE -> handleLassoFree(event, canvasPoint)
+            LassoMode.RECTANGLE -> handleLassoRect(event, canvasPoint)
+        }
+        return true
+    }
+
+    private fun handleLassoFree(event: MotionEvent, canvasPoint: PointF) {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 lassoPoints.clear()
@@ -540,11 +554,67 @@ class InfiniteCanvasView @JvmOverloads constructor(
             }
             MotionEvent.ACTION_UP -> {
                 isLassoing = false
-                // TODO: select strokes inside lasso polygon
+                selectStrokesInLasso()
                 invalidate()
             }
         }
-        return true
+    }
+
+    private fun handleLassoRect(event: MotionEvent, canvasPoint: PointF) {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                lassoStartPoint = canvasPoint
+                lassoPoints.clear()
+                isLassoing = true
+                invalidate()
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (isLassoing) {
+                    val start = lassoStartPoint ?: return
+                    lassoPoints.clear()
+                    lassoPoints.add(PointF(start.x, start.y))
+                    lassoPoints.add(PointF(canvasPoint.x, start.y))
+                    lassoPoints.add(PointF(canvasPoint.x, canvasPoint.y))
+                    lassoPoints.add(PointF(start.x, canvasPoint.y))
+                    invalidate()
+                }
+            }
+            MotionEvent.ACTION_UP -> {
+                isLassoing = false
+                selectStrokesInLasso()
+                invalidate()
+            }
+        }
+    }
+
+    private fun selectStrokesInLasso() {
+        if (lassoPoints.size < 3) return
+        val layer = board?.activeLayer ?: return
+        val selected = mutableListOf<Stroke>()
+        for (stroke in layer.strokes) {
+            if (stroke.points.any { pt -> isPointInPolygon(pt.x, pt.y, lassoPoints) }) {
+                selected.add(stroke)
+            }
+        }
+        // Highlight selected strokes (for now, just mark them)
+        if (selected.isNotEmpty()) {
+            listener?.onObjectSelected(null)
+        }
+    }
+
+    private fun isPointInPolygon(x: Float, y: Float, polygon: List<PointF>): Boolean {
+        var inside = false
+        var j = polygon.size - 1
+        for (i in polygon.indices) {
+            val pi = polygon[i]
+            val pj = polygon[j]
+            if ((pi.y > y) != (pj.y > y) &&
+                x < (pj.x - pi.x) * (y - pi.y) / (pj.y - pi.y) + pi.x) {
+                inside = !inside
+            }
+            j = i
+        }
+        return inside
     }
 
     private fun handlePan(event: MotionEvent): Boolean {
@@ -762,6 +832,10 @@ class InfiniteCanvasView @JvmOverloads constructor(
 
 enum class CanvasMode {
     DRAW, ERASE, SELECT, LASSO, PAN, INSERT
+}
+
+enum class LassoMode {
+    FREE, RECTANGLE
 }
 
 sealed class CanvasAction {

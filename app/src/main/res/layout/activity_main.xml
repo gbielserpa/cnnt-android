@@ -187,7 +187,20 @@
                 android:background="@drawable/btn_tool"
                 android:scaleType="centerInside"
                 android:padding="8dp"
-                android:contentDescription="Modo Foco" />
+                android:contentDescription="Modo Foco"
+                android:layout_marginEnd="8dp" />
+
+            <!-- Brush Settings -->
+            <ImageButton
+                android:id="@+id/btnBrushSettings"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@drawable/ic_settings"
+                android:background="@drawable/btn_tool"
+                android:scaleType="centerInside"
+                android:padding="8dp"
+                android:contentDescription="Configurar Pincel"
+                android:layout_marginEnd="8dp" />
 
         </LinearLayout>
         </HorizontalScrollView>

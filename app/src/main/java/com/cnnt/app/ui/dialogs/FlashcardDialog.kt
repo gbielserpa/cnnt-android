@@ -24,7 +24,13 @@ class FlashcardDialog(
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
         setContentView(R.layout.dialog_flashcard)
+
+        window?.setLayout(
+            (context.resources.displayMetrics.widthPixels * 0.85).toInt(),
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+        )
 
         currentCards = viewModel.flashcards.value
 

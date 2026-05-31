@@ -96,6 +96,9 @@ class MainActivity : AppCompatActivity(), InfiniteCanvasView.CanvasListener {
         toolbarManager.onModeSelected = { mode ->
             binding.canvasView.setMode(mode)
         }
+        toolbarManager.onLassoModeSelected = { lassoMode ->
+            binding.canvasView.setLassoMode(lassoMode)
+        }
         toolbarManager.onUndoClicked = {
             binding.canvasView.undo()
         }
@@ -113,6 +116,10 @@ class MainActivity : AppCompatActivity(), InfiniteCanvasView.CanvasListener {
         }
         toolbarManager.onFlashcardClicked = {
             showFlashcardDialog()
+        }
+        toolbarManager.onBrushSettingsChanged = { brush ->
+            viewModel.setCurrentBrush(brush)
+            binding.canvasView.setBrush(brush)
         }
     }
 

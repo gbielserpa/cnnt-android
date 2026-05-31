@@ -255,10 +255,10 @@ class InkEngine {
 
     // --- CNNT Special: Chisel/beveled flat pen for lettering ---
     // Simulates a flat-tip calligraphy pen held at ~45 degrees
-    // DOWN strokes = THICK (full chisel width), UP strokes = THIN (hairline)
-    // Creates dramatic contrast for classic lettering style
+    // DOWN strokes = THICK, UP strokes = THIN (hairline)
+    // Uses brush.directionSensitivity and brush.pressureSensitivity for user tuning
     private fun renderCnntSpecial(canvas: Canvas, stroke: Stroke, brush: BrushPreset, points: List<StrokePoint>) {
-        val smoothed = smoothPoints(points, 0.4f)
+        val smoothed = smoothPoints(points, brush.smoothing)
         if (smoothed.size < 2) return
 
         val path = Path()
@@ -267,17 +267,21 @@ class InkEngine {
 
         // Chisel angle: 45 degrees (classic calligraphy)
         val chiselAngle = Math.PI.toFloat() / 4f
+        // Direction sensitivity from brush config (0-1, higher = more dramatic thick/thin)
+        val dirSens = brush.directionSensitivity.coerceIn(0f, 1.5f)
+        // Pressure influence from brush config
+        val pressSens = brush.pressureSensitivity.coerceIn(0f, 2f)
 
-        // Smooth the direction factor to avoid jagged transitions
         var prevDirFactor = 0.5f
 
         for (i in smoothed.indices) {
             val point = smoothed[i]
             val t = i.toFloat() / smoothed.size
-            val taper = calculateTaper(t, StrokeBehavior.SMOOTH_TAPER, StrokeBehavior.SMOOTH_TAPER, smoothed.size)
-            val pressure = point.pressure.coerceIn(0.2f, 1f)
+            val taper = calculateTaper(t, brush.startBehavior, brush.endBehavior, smoothed.size)
+            val pressure = if (pressSens > 0.01f) {
+                (0.3f + point.pressure.coerceIn(0.1f, 1f) * 0.7f * pressSens).coerceIn(0.2f, 1.2f)
+            } else 1f
 
-            // Calculate stroke direction
             val dy = if (i > 0) smoothed[i].y - smoothed[i - 1].y
                      else if (smoothed.size > 1) smoothed[1].y - smoothed[0].y else 0f
             val dx = if (i > 0) smoothed[i].x - smoothed[i - 1].x
@@ -286,29 +290,29 @@ class InkEngine {
             val segLen = hypot(dx, dy)
             val angle = atan2(dy.toDouble(), dx.toDouble()).toFloat()
 
-            // Chisel width depends on angle relative to chisel orientation
-            // When stroke is perpendicular to chisel = max width
-            // When stroke is parallel to chisel = min width
+            // Chisel factor: perpendicular to chisel = max width
             val chiselFactor = abs(sin(angle + chiselAngle))
 
-            // Vertical emphasis: down strokes get additional width boost
+            // Down-stroke boost
             val verticalRatio = if (segLen > 0.1f) (dy / segLen) else 0f
-            val downBoost = if (verticalRatio > 0.1f) 1f + verticalRatio * 0.5f else 1f
+            val downBoost = if (verticalRatio > 0.1f) 1f + verticalRatio * 0.4f else 1f
 
-            // Combined direction factor with DRAMATIC range: 0.08 (hairline) to 1.0 (full width)
-            val rawDirFactor = (0.08f + chiselFactor * 0.92f * downBoost).coerceIn(0.08f, 1.2f)
+            // Min thickness: higher dirSens = thinner hairlines
+            val minThickness = max(0.05f, 0.15f - dirSens * 0.1f)
+            val rawDirFactor = (minThickness + chiselFactor * (1f - minThickness) * downBoost).coerceIn(minThickness, 1.2f)
 
-            // Smooth transitions between thick and thin
-            val dirFactor = prevDirFactor * 0.3f + rawDirFactor * 0.7f
+            // Smooth transitions (lighter = more responsive, heavier = smoother)
+            val smoothBlend = 0.4f - brush.smoothing * 0.3f
+            val dirFactor = prevDirFactor * smoothBlend + rawDirFactor * (1f - smoothBlend)
             prevDirFactor = dirFactor
 
-            // Full chisel width = stroke.size * 2.5 for dramatic effect
-            val width = stroke.size * pressure * dirFactor * taper * 2.5f
+            // Width: use dirSens as multiplier for dramatic effect
+            val widthMultiplier = 1.5f + dirSens * 1.5f
+            val width = stroke.size * pressure * dirFactor * taper * widthMultiplier
 
-            // Chisel tip: perpendicular is offset by chisel angle
             val perpAngle = angle + Math.PI.toFloat() / 2f
-            val chiselPerpAngle = perpAngle + chiselAngle * 0.3f
-            val halfW = max(width * 0.5f, 0.2f)
+            val chiselPerpAngle = perpAngle + chiselAngle * 0.2f
+            val halfW = max(width * 0.5f, 0.15f)
 
             topEdge.add(Pair(
                 point.x + cos(chiselPerpAngle) * halfW,

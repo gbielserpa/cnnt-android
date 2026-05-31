@@ -3,12 +3,15 @@ package com.cnnt.app.ui.toolbar
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.View
+import android.widget.PopupMenu
 import android.widget.SeekBar
 import androidx.appcompat.app.AppCompatActivity
 import com.cnnt.app.canvas.CanvasMode
+import com.cnnt.app.canvas.LassoMode
 import com.cnnt.app.data.model.BrushPreset
 import com.cnnt.app.databinding.ActivityMainBinding
 import com.cnnt.app.ui.dialogs.BrushPickerDialog
+import com.cnnt.app.ui.dialogs.BrushSettingsDialog
 import com.cnnt.app.ui.dialogs.ColorPickerDialog
 
 class ToolbarManager(
@@ -19,12 +22,17 @@ class ToolbarManager(
     var onColorSelected: ((Int) -> Unit)? = null
     var onSizeChanged: ((Float) -> Unit)? = null
     var onModeSelected: ((CanvasMode) -> Unit)? = null
+    var onLassoModeSelected: ((LassoMode) -> Unit)? = null
     var onUndoClicked: (() -> Unit)? = null
     var onRedoClicked: (() -> Unit)? = null
     var onFocusModeToggled: (() -> Unit)? = null
     var onExportClicked: (() -> Unit)? = null
     var onOcrClicked: (() -> Unit)? = null
     var onFlashcardClicked: (() -> Unit)? = null
+    var onBrushSettingsChanged: ((BrushPreset) -> Unit)? = null
+
+    private var currentBrush: BrushPreset = BrushPreset.gelPen()
+    private var lastLassoMode: LassoMode = LassoMode.FREE
 
     init {
         setupButtons()
@@ -34,6 +42,7 @@ class ToolbarManager(
     private fun setupButtons() {
         binding.btnBrush.setOnClickListener {
             BrushPickerDialog(activity) { brush ->
+                currentBrush = brush
                 onBrushSelected?.invoke(brush)
             }.show()
         }
@@ -54,9 +63,16 @@ class ToolbarManager(
             highlightButton(binding.btnSelect)
         }
 
+        // Lasso: click = use last mode, long-press = show popup with options
         binding.btnLasso.setOnClickListener {
+            onLassoModeSelected?.invoke(lastLassoMode)
             onModeSelected?.invoke(CanvasMode.LASSO)
             highlightButton(binding.btnLasso)
+        }
+
+        binding.btnLasso.setOnLongClickListener {
+            showLassoModePopup()
+            true
         }
 
         binding.btnUndo.setOnClickListener {
@@ -82,6 +98,32 @@ class ToolbarManager(
         binding.btnFlashcard.setOnClickListener {
             onFlashcardClicked?.invoke()
         }
+
+        binding.btnBrushSettings.setOnClickListener {
+            showBrushSettings()
+        }
+    }
+
+    private fun showLassoModePopup() {
+        val popup = PopupMenu(activity, binding.btnLasso)
+        popup.menu.add(0, 0, 0, "Seleção Livre")
+        popup.menu.add(0, 1, 1, "Seleção Retangular")
+        popup.setOnMenuItemClickListener { item ->
+            val mode = if (item.itemId == 0) LassoMode.FREE else LassoMode.RECTANGLE
+            lastLassoMode = mode
+            onLassoModeSelected?.invoke(mode)
+            onModeSelected?.invoke(CanvasMode.LASSO)
+            highlightButton(binding.btnLasso)
+            true
+        }
+        popup.show()
+    }
+
+    private fun showBrushSettings() {
+        BrushSettingsDialog(activity, currentBrush) { updatedBrush ->
+            currentBrush = updatedBrush
+            onBrushSettingsChanged?.invoke(updatedBrush)
+        }.show()
     }
 
     private fun setupSizeSlider() {
@@ -96,6 +138,7 @@ class ToolbarManager(
     }
 
     fun updateBrushIndicator(brush: BrushPreset) {
+        currentBrush = brush
         binding.btnBrush.text = brush.name
     }
 
