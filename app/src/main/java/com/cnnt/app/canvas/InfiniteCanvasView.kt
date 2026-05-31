@@ -110,9 +110,42 @@ class InfiniteCanvasView @JvmOverloads constructor(
     private var layerCache: Bitmap? = null
     private var cacheValid = false
 
+    // Cached brush lookup (avoid creating 12 objects per stroke per frame)
+    private val cachedBrushMap: Map<String, BrushPreset> = BrushPreset.defaultBrushes().associateBy { it.id }
+    private val defaultBrush = BrushPreset.gelPen()
+
+    // Stylus button eraser
+    private var previousMode: CanvasMode = CanvasMode.DRAW
+    private var stylusButtonDown = false
+
+    // Reusable Paint objects for onDraw (avoid GC pressure)
+    private val lassoPaint = Paint().apply {
+        color = 0xFF00B0FF.toInt()
+        style = Paint.Style.STROKE
+        strokeWidth = 2f
+    }
+    private val selectPaint = Paint().apply {
+        color = 0xFF00B0FF.toInt()
+        style = Paint.Style.STROKE
+        strokeWidth = 2f
+    }
+    private val handlePaint = Paint().apply {
+        color = 0xFF00B0FF.toInt()
+        style = Paint.Style.FILL
+    }
+    private val objPaint = Paint().apply {
+        style = Paint.Style.FILL
+    }
+    private val borderPaint = Paint().apply {
+        style = Paint.Style.STROKE
+    }
+    private val textPaint = Paint().apply {
+        isAntiAlias = true
+    }
+
     init {
         scaleDetector = ScaleGestureDetector(context, ScaleListener())
-        setLayerType(LAYER_TYPE_HARDWARE, null)
+        setLayerType(LAYER_TYPE_SOFTWARE, null)
     }
 
     fun setBoard(board: Board) {
@@ -132,6 +165,9 @@ class InfiniteCanvasView @JvmOverloads constructor(
 
     fun setBrush(brush: BrushPreset) {
         currentBrush = brush
+        // Apply brush defaults
+        currentSize = brush.baseSize
+        currentOpacity = brush.opacity
     }
 
     fun setDrawColor(color: Int) {
@@ -274,6 +310,21 @@ class InfiniteCanvasView @JvmOverloads constructor(
         // Palm rejection: finger = pan only (unless finger drawing enabled)
         if (isFingerInput && palmRejectionEnabled && !fingerDrawingEnabled) {
             return handlePan(event)
+        }
+
+        // Stylus button eraser: hold button = erase, release = restore previous tool
+        if (isStylusInput) {
+            val buttonPressed = (event.buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY) != 0
+            if (buttonPressed && !stylusButtonDown) {
+                stylusButtonDown = true
+                if (currentMode != CanvasMode.ERASE) {
+                    previousMode = currentMode
+                    currentMode = CanvasMode.ERASE
+                }
+            } else if (!buttonPressed && stylusButtonDown) {
+                stylusButtonDown = false
+                currentMode = previousMode
+            }
         }
 
         // Eraser tool from stylus button or eraser end
@@ -530,12 +581,8 @@ class InfiniteCanvasView @JvmOverloads constructor(
 
         // Draw lasso
         if (isLassoing && lassoPoints.size > 1) {
-            val lassoPaint = Paint().apply {
-                color = 0xFF00B0FF.toInt()
-                style = Paint.Style.STROKE
-                strokeWidth = 2f / scale
-                pathEffect = android.graphics.DashPathEffect(floatArrayOf(10f / scale, 5f / scale), 0f)
-            }
+            lassoPaint.strokeWidth = 2f / scale
+            lassoPaint.pathEffect = android.graphics.DashPathEffect(floatArrayOf(10f / scale, 5f / scale), 0f)
             for (i in 1 until lassoPoints.size) {
                 canvas.drawLine(
                     lassoPoints[i - 1].x, lassoPoints[i - 1].y,
@@ -546,18 +593,9 @@ class InfiniteCanvasView @JvmOverloads constructor(
 
         // Draw selection indicator
         selectedObject?.let { obj ->
-            val selectPaint = Paint().apply {
-                color = 0xFF00B0FF.toInt()
-                style = Paint.Style.STROKE
-                strokeWidth = 2f / scale
-            }
+            selectPaint.strokeWidth = 2f / scale
             canvas.drawRect(obj.x, obj.y, obj.x + obj.width, obj.y + obj.height, selectPaint)
-            // Draw resize handles
             val handleSize = 8f / scale
-            val handlePaint = Paint().apply {
-                color = 0xFF00B0FF.toInt()
-                style = Paint.Style.FILL
-            }
             canvas.drawRect(obj.x - handleSize, obj.y - handleSize, obj.x + handleSize, obj.y + handleSize, handlePaint)
             canvas.drawRect(obj.x + obj.width - handleSize, obj.y - handleSize, obj.x + obj.width + handleSize, obj.y + handleSize, handlePaint)
             canvas.drawRect(obj.x - handleSize, obj.y + obj.height - handleSize, obj.x + handleSize, obj.y + obj.height + handleSize, handlePaint)
@@ -588,30 +626,27 @@ class InfiniteCanvasView @JvmOverloads constructor(
     private fun drawLayer(canvas: Canvas, layer: Layer) {
         val alpha = (layer.opacity * 255).toInt()
 
-        // Draw spatial objects
-        for (obj in layer.objects) {
+        // Safe copy to avoid ConcurrentModificationException
+        val objectsCopy = ArrayList(layer.objects)
+        val strokesCopy = ArrayList(layer.strokes)
+
+        for (obj in objectsCopy) {
             drawSpatialObject(canvas, obj, alpha)
         }
 
-        // Draw strokes
-        for (stroke in layer.strokes) {
+        for (stroke in strokesCopy) {
             val brush = getBrushForStroke(stroke)
             inkEngine.renderStroke(canvas, stroke, brush)
         }
     }
 
     private fun drawSpatialObject(canvas: Canvas, obj: SpatialObject, layerAlpha: Int) {
-        val objPaint = Paint().apply {
-            color = obj.style.backgroundColor
-            alpha = layerAlpha
-            style = Paint.Style.FILL
-        }
-        val borderPaint = Paint().apply {
-            color = obj.style.borderColor
-            alpha = layerAlpha
-            style = Paint.Style.STROKE
-            strokeWidth = obj.style.borderWidth
-        }
+        objPaint.color = obj.style.backgroundColor
+        objPaint.alpha = layerAlpha
+
+        borderPaint.color = obj.style.borderColor
+        borderPaint.alpha = layerAlpha
+        borderPaint.strokeWidth = obj.style.borderWidth
 
         val rect = RectF(obj.x, obj.y, obj.x + obj.width, obj.y + obj.height)
         val cr = obj.style.cornerRadius
@@ -621,14 +656,10 @@ class InfiniteCanvasView @JvmOverloads constructor(
         }
         canvas.drawRoundRect(rect, cr, cr, borderPaint)
 
-        // Render content preview
         when (val content = obj.content) {
             is com.cnnt.app.data.model.ObjectContent.Text -> {
-                val textPaint = Paint().apply {
-                    color = content.fontColor
-                    textSize = content.fontSize
-                    isAntiAlias = true
-                }
+                textPaint.color = content.fontColor
+                textPaint.textSize = content.fontSize
                 val padding = obj.style.padding
                 canvas.drawText(
                     content.text,
@@ -638,11 +669,8 @@ class InfiniteCanvasView @JvmOverloads constructor(
                 )
             }
             is com.cnnt.app.data.model.ObjectContent.Checklist -> {
-                val textPaint = Paint().apply {
-                    color = 0xFFE0E0E0.toInt()
-                    textSize = 12f
-                    isAntiAlias = true
-                }
+                textPaint.color = 0xFFE0E0E0.toInt()
+                textPaint.textSize = 12f
                 var yOffset = obj.y + obj.style.padding + 14f
                 for (item in content.items.take(5)) {
                     val prefix = if (item.checked) "☑ " else "☐ "
@@ -655,7 +683,7 @@ class InfiniteCanvasView @JvmOverloads constructor(
     }
 
     private fun getBrushForStroke(stroke: Stroke): BrushPreset {
-        return BrushPreset.defaultBrushes().find { it.id == stroke.brushId } ?: BrushPreset.gelPen()
+        return cachedBrushMap[stroke.brushId] ?: defaultBrush
     }
 
     private fun getVisibleCanvasRect(): RectF {

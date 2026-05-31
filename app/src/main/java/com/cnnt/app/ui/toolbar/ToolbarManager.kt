@@ -96,7 +96,7 @@ class ToolbarManager(
     }
 
     fun updateBrushIndicator(brush: BrushPreset) {
-        binding.btnBrush.text = brush.name.take(8)
+        binding.btnBrush.text = brush.name
     }
 
     fun updateColorIndicator(color: Int) {

@@ -133,8 +133,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun saveCurrentState() {
-        val notebook = _currentNotebook.value ?: return
-        repository.saveNotebook(notebook)
+        try {
+            val notebook = _currentNotebook.value ?: return
+            repository.saveNotebook(notebook)
+        } catch (e: Exception) {
+            android.util.Log.e("CNNT", "Auto-save error: ${e.message}", e)
+        }
     }
 
     override fun onCleared() {

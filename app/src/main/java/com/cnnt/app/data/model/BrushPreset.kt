@@ -40,13 +40,13 @@ data class BrushPreset(
             category = BrushCategory.PEN, baseSize = 3f,
             pressureSensitivity = 0.8f, smoothing = 0.4f,
             tipShape = TipShape.ROUND,
-            startBehavior = StrokeBehavior.TAPER,
-            endBehavior = StrokeBehavior.TAPER
+            startBehavior = StrokeBehavior.SMOOTH_TAPER,
+            endBehavior = StrokeBehavior.SMOOTH_TAPER
         )
 
         fun softPencil() = BrushPreset(
             id = "brush_soft_pencil", name = "Lápis Macio",
-            category = BrushCategory.PENCIL, baseSize = 2.5f,
+            category = BrushCategory.PENCIL, baseSize = 3f,
             pressureSensitivity = 1.2f, smoothing = 0.2f,
             tipShape = TipShape.ROUND, grain = 0.4f, opacity = 0.85f,
             startBehavior = StrokeBehavior.NONE,
@@ -55,7 +55,7 @@ data class BrushPreset(
 
         fun marker() = BrushPreset(
             id = "brush_marker", name = "Marcador",
-            category = BrushCategory.MARKER, baseSize = 8f,
+            category = BrushCategory.MARKER, baseSize = 6f,
             pressureSensitivity = 0.3f, smoothing = 0.6f,
             tipShape = TipShape.FLAT, opacity = 0.9f,
             directionSensitivity = 0.6f,
@@ -65,17 +65,17 @@ data class BrushPreset(
 
         fun highlighter() = BrushPreset(
             id = "brush_highlighter", name = "Marca-texto",
-            category = BrushCategory.HIGHLIGHTER, baseSize = 16f,
+            category = BrushCategory.HIGHLIGHTER, baseSize = 12f,
             pressureSensitivity = 0.1f, smoothing = 0.8f,
-            tipShape = TipShape.FLAT, opacity = 0.35f,
+            tipShape = TipShape.FLAT, opacity = 0.30f,
             directionSensitivity = 0.4f,
             startBehavior = StrokeBehavior.NONE,
             endBehavior = StrokeBehavior.NONE
         )
 
         fun chiselCalligraphy() = BrushPreset(
-            id = CHISEL_ID, name = "Chisel / Caligrafia",
-            category = BrushCategory.CALLIGRAPHY, baseSize = 6f,
+            id = CHISEL_ID, name = "Caligrafia",
+            category = BrushCategory.CALLIGRAPHY, baseSize = 5f,
             pressureSensitivity = 1.0f, smoothing = 0.3f,
             tipShape = TipShape.CHISEL, directionSensitivity = 1.0f,
             tiltSensitivity = 0.8f,
@@ -85,7 +85,7 @@ data class BrushPreset(
 
         fun cnntSpecial() = BrushPreset(
             id = CNNT_SPECIAL_ID, name = "Pincel CNNT",
-            category = BrushCategory.SPECIAL, baseSize = 5f,
+            category = BrushCategory.SPECIAL, baseSize = 4f,
             pressureSensitivity = 1.0f, smoothing = 0.5f,
             tipShape = TipShape.CHISEL, directionSensitivity = 0.8f,
             tiltSensitivity = 0.6f, velocitySensitivity = 0.5f,
@@ -105,7 +105,7 @@ data class BrushPreset(
 
         fun technicalPen() = BrushPreset(
             id = "brush_technical_pen", name = "Caneta Técnica",
-            category = BrushCategory.PEN, baseSize = 2f,
+            category = BrushCategory.PEN, baseSize = 1.5f,
             pressureSensitivity = 0.0f, smoothing = 0.7f,
             tipShape = TipShape.ROUND,
             startBehavior = StrokeBehavior.NONE,
@@ -113,8 +113,8 @@ data class BrushPreset(
         )
 
         fun grainBrush() = BrushPreset(
-            id = "brush_grain", name = "Brush Granulado",
-            category = BrushCategory.TEXTURE, baseSize = 10f,
+            id = "brush_grain", name = "Granulado",
+            category = BrushCategory.TEXTURE, baseSize = 8f,
             pressureSensitivity = 0.9f, smoothing = 0.3f,
             tipShape = TipShape.ROUND, grain = 0.8f, spacing = 0.05f,
             startBehavior = StrokeBehavior.NONE,
@@ -122,7 +122,7 @@ data class BrushPreset(
         )
 
         fun neonLaser() = BrushPreset(
-            id = "brush_neon", name = "Neon / Laser",
+            id = "brush_neon", name = "Neon",
             category = BrushCategory.EFFECT, baseSize = 3f,
             pressureSensitivity = 0.5f, smoothing = 0.5f,
             tipShape = TipShape.ROUND, opacity = 0.9f,
@@ -131,8 +131,8 @@ data class BrushPreset(
         )
 
         fun sprayAirbrush() = BrushPreset(
-            id = "brush_spray", name = "Spray / Airbrush",
-            category = BrushCategory.SPRAY, baseSize = 20f,
+            id = "brush_spray", name = "Spray",
+            category = BrushCategory.SPRAY, baseSize = 15f,
             pressureSensitivity = 1.0f, smoothing = 0.1f,
             tipShape = TipShape.ROUND, jitter = 0.8f, spacing = 0.02f,
             opacity = 0.3f,
@@ -142,7 +142,7 @@ data class BrushPreset(
 
         fun experimentalWild() = BrushPreset(
             id = "brush_experimental", name = "Experimental",
-            category = BrushCategory.EXPERIMENTAL, baseSize = 7f,
+            category = BrushCategory.EXPERIMENTAL, baseSize = 5f,
             pressureSensitivity = 1.5f, smoothing = 0.2f,
             tipShape = TipShape.ROUND, jitter = 0.3f,
             velocitySensitivity = 1.0f, directionSensitivity = 0.5f,

@@ -59,8 +59,12 @@ class CnntRepository(private val database: CnntDatabase) {
             opacity = layer.opacity,
             order = layer.order
         ))
-        // Save strokes
-        val strokeEntities = layer.strokes.map { stroke ->
+        // Safe copy to avoid ConcurrentModificationException
+        val strokesCopy = ArrayList(layer.strokes)
+        val objectsCopy = ArrayList(layer.objects)
+
+        val strokeEntities = strokesCopy.map { stroke ->
+            val pointsCopy = ArrayList(stroke.points)
             StrokeEntity(
                 id = stroke.id,
                 layerId = layer.id,
@@ -68,14 +72,13 @@ class CnntRepository(private val database: CnntDatabase) {
                 color = stroke.color,
                 size = stroke.size,
                 opacity = stroke.opacity,
-                pointsData = serializePoints(stroke.points),
+                pointsData = serializePoints(pointsCopy),
                 createdAt = stroke.createdAt
             )
         }
         strokeDao.insertAll(strokeEntities)
 
-        // Save spatial objects
-        for (obj in layer.objects) {
+        for (obj in objectsCopy) {
             saveSpatialObject(obj, layer.id)
         }
     }
