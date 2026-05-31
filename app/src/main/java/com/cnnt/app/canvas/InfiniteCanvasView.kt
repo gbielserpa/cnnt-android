@@ -13,6 +13,7 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
+import android.util.Log
 import com.cnnt.app.data.model.Board
 import com.cnnt.app.data.model.BrushPreset
 import com.cnnt.app.data.model.Layer
@@ -89,9 +90,10 @@ class InfiniteCanvasView @JvmOverloads constructor(
     private var palmRejectionEnabled = true
     private var fingerDrawingEnabled = false
 
-    // Undo/Redo
+    // Undo/Redo (limited to prevent memory leak)
     private val undoStack = mutableListOf<CanvasAction>()
     private val redoStack = mutableListOf<CanvasAction>()
+    private val maxUndoStackSize = 100
 
     // Background
     private val bgPaint = Paint().apply {
@@ -299,6 +301,7 @@ class InfiniteCanvasView @JvmOverloads constructor(
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
+      try {
         scaleDetector.onTouchEvent(event)
         if (isScaling) return true
 
@@ -341,6 +344,10 @@ class InfiniteCanvasView @JvmOverloads constructor(
             CanvasMode.INSERT -> return handleInsert(event)
         }
         return true
+      } catch (e: Exception) {
+          Log.e("CNNT", "onTouchEvent error: ${e.message}", e)
+          return true
+      }
     }
 
     private fun handleDraw(event: MotionEvent, validInput: Boolean): Boolean {
@@ -406,6 +413,7 @@ class InfiniteCanvasView @JvmOverloads constructor(
                     if (!stroke.isEmpty()) {
                         board?.activeLayer?.strokes?.add(stroke)
                         undoStack.add(CanvasAction.AddStroke(stroke))
+                        if (undoStack.size > maxUndoStackSize) undoStack.removeAt(0)
                         redoStack.clear()
                         listener?.onStrokeCompleted(stroke)
                         invalidateCache()
@@ -555,7 +563,7 @@ class InfiniteCanvasView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-
+      try {
         // Background
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
 
@@ -603,6 +611,9 @@ class InfiniteCanvasView @JvmOverloads constructor(
         }
 
         canvas.restore()
+      } catch (e: Exception) {
+          Log.e("CNNT", "onDraw error: ${e.message}", e)
+      }
     }
 
     private fun drawGrid(canvas: Canvas) {
@@ -626,15 +637,11 @@ class InfiniteCanvasView @JvmOverloads constructor(
     private fun drawLayer(canvas: Canvas, layer: Layer) {
         val alpha = (layer.opacity * 255).toInt()
 
-        // Safe copy to avoid ConcurrentModificationException
-        val objectsCopy = ArrayList(layer.objects)
-        val strokesCopy = ArrayList(layer.strokes)
-
-        for (obj in objectsCopy) {
+        for (obj in layer.objects) {
             drawSpatialObject(canvas, obj, alpha)
         }
 
-        for (stroke in strokesCopy) {
+        for (stroke in layer.strokes) {
             val brush = getBrushForStroke(stroke)
             inkEngine.renderStroke(canvas, stroke, brush)
         }

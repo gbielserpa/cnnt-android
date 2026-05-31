@@ -24,19 +24,28 @@
             app:layout_constraintEnd_toEndOf="parent" />
 
         <!-- Top Toolbar (Estojo Superior) -->
-        <LinearLayout
-            android:id="@+id/toolbarContainer"
-            android:layout_width="wrap_content"
+        <HorizontalScrollView
+            android:id="@+id/toolbarScroll"
+            android:layout_width="0dp"
             android:layout_height="48dp"
             android:layout_marginTop="8dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:padding="4dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            android:scrollbars="none"
             android:background="@drawable/toolbar_background"
             android:elevation="4dp"
+            android:fillViewport="false"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:id="@+id/toolbarContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="4dp">
 
             <!-- Brush button -->
             <Button
@@ -172,6 +181,7 @@
                 android:background="@drawable/btn_tool" />
 
         </LinearLayout>
+        </HorizontalScrollView>
 
         <!-- Sidebar toggle -->
         <Button

@@ -38,7 +38,8 @@ abstract class CnntDatabase : RoomDatabase() {
                     context.applicationContext,
                     CnntDatabase::class.java,
                     "cnnt_database"
-                ).build()
+                ).fallbackToDestructiveMigration()
+                .build()
                 INSTANCE = instance
                 instance
             }

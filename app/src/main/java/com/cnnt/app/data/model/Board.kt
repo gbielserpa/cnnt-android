@@ -13,5 +13,5 @@ data class Board(
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 ) {
-    val activeLayer: Layer get() = layers[activeLayerIndex]
+    val activeLayer: Layer get() = layers.getOrElse(activeLayerIndex) { layers.firstOrNull() ?: Layer() }
 }

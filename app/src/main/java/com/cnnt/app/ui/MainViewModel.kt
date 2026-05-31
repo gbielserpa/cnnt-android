@@ -11,9 +11,11 @@ import com.cnnt.app.data.repository.CnntRepository
 import com.cnnt.app.flashcard.FlashcardManager
 import com.cnnt.app.ocr.OcrEngine
 import com.cnnt.app.export.ExportManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -86,14 +88,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun saveStroke(stroke: Stroke) {
-        viewModelScope.launch {
-            repository.saveStroke(stroke)
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                repository.saveStroke(stroke)
+            } catch (e: Exception) {
+                android.util.Log.e("CNNT", "Save stroke error: ${e.message}", e)
+            }
         }
     }
 
     fun deleteStroke(strokeId: String) {
-        viewModelScope.launch {
-            repository.deleteStroke(strokeId)
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                repository.deleteStroke(strokeId)
+            } catch (e: Exception) {
+                android.util.Log.e("CNNT", "Delete stroke error: ${e.message}", e)
+            }
         }
     }
 
@@ -135,7 +145,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun saveCurrentState() {
         try {
             val notebook = _currentNotebook.value ?: return
-            repository.saveNotebook(notebook)
+            withContext(Dispatchers.IO) {
+                repository.saveNotebook(notebook)
+            }
         } catch (e: Exception) {
             android.util.Log.e("CNNT", "Auto-save error: ${e.message}", e)
         }
