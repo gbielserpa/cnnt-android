@@ -86,6 +86,9 @@ dependencies {
     // ML Kit OCR
     implementation("com.google.mlkit:text-recognition:16.0.0")
 
+    // ML Kit Digital Ink Recognition (handwriting to text)
+    implementation("com.google.mlkit:digital-ink-recognition:18.1.0")
+
     // Gson for JSON serialization
     implementation("com.google.code.gson:gson:2.10.1")
 

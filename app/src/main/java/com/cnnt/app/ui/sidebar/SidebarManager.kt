@@ -1,14 +1,16 @@
 package com.cnnt.app.ui.sidebar
 
-import android.view.LayoutInflater
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.view.HapticFeedbackConstants
+import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
-import android.widget.TextView
+import android.content.Context
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.GravityCompat
 import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
-import com.cnnt.app.R
 import com.cnnt.app.data.model.SpatialObjectType
 import com.cnnt.app.databinding.ActivityMainBinding
 
@@ -19,6 +21,7 @@ class SidebarManager(
     var onPageSelected: ((Int) -> Unit)? = null
     var onNewPageClicked: (() -> Unit)? = null
     var onInsertBlockClicked: ((SpatialObjectType) -> Unit)? = null
+    var onInsertHandwritingBlock: (() -> Unit)? = null
 
     init {
         setupSidebarToggle()
@@ -63,6 +66,35 @@ class SidebarManager(
         binding.btnInsertLink.setOnClickListener {
             onInsertBlockClicked?.invoke(SpatialObjectType.LINK)
             closeSidebar()
+        }
+
+        // Handwriting block with haptic feedback on long press
+        binding.btnInsertHandwriting.setOnLongClickListener { view ->
+            triggerHapticFeedback(view)
+            onInsertHandwritingBlock?.invoke()
+            closeSidebar()
+            true
+        }
+        binding.btnInsertHandwriting.setOnClickListener {
+            onInsertHandwritingBlock?.invoke()
+            closeSidebar()
+        }
+    }
+
+    private fun triggerHapticFeedback(view: View) {
+        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = activity.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                val vibrator = vibratorManager?.defaultVibrator
+                vibrator?.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                val vibrator = activity.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                vibrator?.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
+            }
+        } catch (e: Exception) {
+            // Ignore vibration failures
         }
     }
 

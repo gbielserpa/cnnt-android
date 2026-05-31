@@ -21,6 +21,7 @@ import com.cnnt.app.ui.dialogs.ColorPickerDialog
 import com.cnnt.app.ui.dialogs.ExportDialog
 import com.cnnt.app.ui.dialogs.FlashcardDialog
 import com.cnnt.app.ui.dialogs.OcrDialog
+import com.cnnt.app.ink.HandwritingRecognizer
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity(), InfiniteCanvasView.CanvasListener {
@@ -29,8 +30,14 @@ class MainActivity : AppCompatActivity(), InfiniteCanvasView.CanvasListener {
     private lateinit var viewModel: MainViewModel
     private lateinit var toolbarManager: ToolbarManager
     private lateinit var sidebarManager: SidebarManager
+    private lateinit var handwritingRecognizer: HandwritingRecognizer
 
     private var focusModeActive = false
+    private var handwritingReady = false
+
+    // Accumulate strokes per block for multi-stroke recognition
+    private val pendingHandwritingStrokes = mutableMapOf<String, MutableList<List<HandwritingRecognizer.StrokePointData>>>()
+    private val handwritingTimers = mutableMapOf<String, android.os.Handler>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,6 +55,18 @@ class MainActivity : AppCompatActivity(), InfiniteCanvasView.CanvasListener {
 
         // Load or create default notebook
         viewModel.loadOrCreateDefaultNotebook()
+
+        // Initialize handwriting recognition
+        handwritingRecognizer = HandwritingRecognizer(this)
+        handwritingRecognizer.initialize("pt-BR") { ready ->
+            handwritingReady = ready
+            if (!ready) {
+                // Try English as fallback
+                handwritingRecognizer.initialize("en-US") { fallbackReady ->
+                    handwritingReady = fallbackReady
+                }
+            }
+        }
     }
 
     private fun setupImmersiveMode() {
@@ -134,6 +153,9 @@ class MainActivity : AppCompatActivity(), InfiniteCanvasView.CanvasListener {
         sidebarManager.onInsertBlockClicked = { blockType ->
             insertBlock(blockType)
         }
+        sidebarManager.onInsertHandwritingBlock = {
+            insertHandwritingBlock()
+        }
     }
 
     private fun setupObservers() {
@@ -186,6 +208,81 @@ class MainActivity : AppCompatActivity(), InfiniteCanvasView.CanvasListener {
         binding.canvasView.setMode(CanvasMode.SELECT)
     }
 
+    private fun insertHandwritingBlock() {
+        // Place the block at the center of the current screen view
+        val centerX = binding.canvasView.width / 2f
+        val centerY = binding.canvasView.height / 2f
+        binding.canvasView.addHandwritingBlock(centerX, centerY, 350f, 200f)
+        binding.canvasView.setMode(CanvasMode.DRAW)
+        Toast.makeText(this, "Bloco de texto inserido. Escreva dentro!", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun processHandwritingStroke(blockId: String, points: List<StrokePoint>) {
+        if (!handwritingReady) {
+            Toast.makeText(this, "Modelo de reconhecimento carregando...", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Convert StrokePoints to recognition format
+        val strokeData = points.map { p ->
+            HandwritingRecognizer.StrokePointData(p.x, p.y, p.timestamp)
+        }
+
+        // Accumulate strokes per block (user writes multiple strokes per word)
+        val blockStrokes = pendingHandwritingStrokes.getOrPut(blockId) { mutableListOf() }
+        blockStrokes.add(strokeData)
+
+        // Reset the debounce timer (wait for 1.2s of no new strokes before recognizing)
+        val handler = handwritingTimers.getOrPut(blockId) { android.os.Handler(mainLooper) }
+        handler.removeCallbacksAndMessages(null)
+
+        binding.canvasView.setHandwritingBlockRecognizing(blockId, true)
+
+        handler.postDelayed({
+            val strokes = pendingHandwritingStrokes.remove(blockId) ?: return@postDelayed
+            if (strokes.isEmpty()) return@postDelayed
+
+            handwritingRecognizer.recognize(
+                strokes = strokes,
+                onResult = { text ->
+                    runOnUiThread {
+                        if (text.isNotBlank()) {
+                            binding.canvasView.updateHandwritingBlockText(blockId, text)
+                            // Remove the handwritten strokes from canvas (they're now text)
+                            removeStrokesInBlock(blockId)
+                        } else {
+                            binding.canvasView.setHandwritingBlockRecognizing(blockId, false)
+                        }
+                    }
+                },
+                onError = { e ->
+                    runOnUiThread {
+                        binding.canvasView.setHandwritingBlockRecognizing(blockId, false)
+                        Toast.makeText(this, "Erro no reconhecimento: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            )
+        }, 1200)
+    }
+
+    private fun removeStrokesInBlock(blockId: String) {
+        val board = viewModel.currentBoard.value ?: return
+        val layer = board.activeLayer
+        val block = layer.objects.find { it.id == blockId } ?: return
+
+        // Remove strokes that fall within the block area
+        val toRemove = layer.strokes.filter { stroke ->
+            val points = stroke.points
+            if (points.isEmpty()) return@filter false
+            val avgX = points.map { it.x }.average().toFloat()
+            val avgY = points.map { it.y }.average().toFloat()
+            avgX >= block.x && avgX <= block.x + block.width &&
+            avgY >= block.y && avgY <= block.y + block.height
+        }
+        layer.strokes.removeAll(toRemove.toSet())
+        binding.canvasView.invalidate()
+    }
+
     private fun showExportDialog() {
         ExportDialog(this, viewModel).show()
     }
@@ -218,6 +315,16 @@ class MainActivity : AppCompatActivity(), InfiniteCanvasView.CanvasListener {
 
     override fun onCanvasTransformChanged(scale: Float, translateX: Float, translateY: Float) {
         // Update minimap if enabled
+    }
+
+    override fun onHandwritingStrokeInBlock(blockId: String, points: List<StrokePoint>) {
+        processHandwritingStroke(blockId, points)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        handwritingRecognizer.close()
+        handwritingTimers.values.forEach { it.removeCallbacksAndMessages(null) }
     }
 
     override fun onBackPressed() {

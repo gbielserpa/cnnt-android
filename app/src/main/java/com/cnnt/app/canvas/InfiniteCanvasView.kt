@@ -17,6 +17,7 @@ import android.util.Log
 import com.cnnt.app.data.model.Board
 import com.cnnt.app.data.model.BrushPreset
 import com.cnnt.app.data.model.Layer
+import com.cnnt.app.data.model.ObjectStyle
 import com.cnnt.app.data.model.SpatialObject
 import com.cnnt.app.data.model.Stroke
 import com.cnnt.app.data.model.StrokePoint
@@ -35,6 +36,7 @@ class InfiniteCanvasView @JvmOverloads constructor(
         fun onObjectSelected(obj: SpatialObject?)
         fun onObjectMoved(obj: SpatialObject, newX: Float, newY: Float)
         fun onCanvasTransformChanged(scale: Float, translateX: Float, translateY: Float)
+        fun onHandwritingStrokeInBlock(blockId: String, points: List<StrokePoint>)
     }
 
     var listener: CanvasListener? = null
@@ -132,6 +134,34 @@ class InfiniteCanvasView @JvmOverloads constructor(
         strokeWidth = 2f
         isAntiAlias = true
     }
+
+    // Handwriting block tracking
+    private var activeHandwritingBlockId: String? = null
+    private val handwritingStrokePoints = mutableListOf<StrokePoint>()
+    private var isWritingInBlock = false
+
+    // Handwriting block paints
+    private val hwBlockBorderPaint = Paint().apply {
+        color = 0xFF00B0FF.toInt()
+        style = Paint.Style.STROKE
+        strokeWidth = 2f
+        pathEffect = android.graphics.DashPathEffect(floatArrayOf(8f, 4f), 0f)
+    }
+    private val hwTextPaint = Paint().apply {
+        color = 0xFFFFFFFF.toInt()
+        textSize = 16f
+        isAntiAlias = true
+    }
+    private val hwLabelPaint = Paint().apply {
+        color = 0x88FFFFFF.toInt()
+        textSize = 11f
+        isAntiAlias = true
+    }
+
+    // Resize handles
+    private var isResizingBlock = false
+    private var resizeCorner = -1  // 0=TL, 1=TR, 2=BL, 3=BR
+    private var resizeBlockId: String? = null
 
     // Reusable Paint objects for onDraw (avoid GC pressure)
     private val lassoPaint = Paint().apply {
@@ -370,6 +400,15 @@ class InfiniteCanvasView @JvmOverloads constructor(
       }
     }
 
+    private fun findHandwritingBlockAt(canvasX: Float, canvasY: Float): SpatialObject? {
+        val layer = board?.activeLayer ?: return null
+        return layer.objects.lastOrNull { obj ->
+            obj.type == com.cnnt.app.data.model.SpatialObjectType.HANDWRITING &&
+            canvasX >= obj.x && canvasX <= obj.x + obj.width &&
+            canvasY >= obj.y && canvasY <= obj.y + obj.height
+        }
+    }
+
     private fun handleDraw(event: MotionEvent, validInput: Boolean): Boolean {
         if (!validInput) return handlePan(event)
 
@@ -377,6 +416,20 @@ class InfiniteCanvasView @JvmOverloads constructor(
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                // Check if starting inside a handwriting block
+                val hwBlock = findHandwritingBlockAt(canvasPoint.x, canvasPoint.y)
+                if (hwBlock != null) {
+                    isWritingInBlock = true
+                    activeHandwritingBlockId = hwBlock.id
+                    handwritingStrokePoints.clear()
+                    handwritingStrokePoints.add(StrokePoint(
+                        x = canvasPoint.x, y = canvasPoint.y,
+                        pressure = event.pressure,
+                        timestamp = event.eventTime
+                    ))
+                    // Also draw the stroke visually
+                }
+
                 isDrawing = true
                 val stroke = Stroke(
                     brushId = currentBrush.id,
@@ -385,7 +438,6 @@ class InfiniteCanvasView @JvmOverloads constructor(
                     opacity = currentOpacity,
                     layerId = board?.activeLayer?.id ?: ""
                 )
-                // Process historical points for smoother strokes
                 for (h in 0 until event.historySize) {
                     val hp = screenToCanvas(event.getHistoricalX(h), event.getHistoricalY(h))
                     stroke.addPoint(StrokePoint(
@@ -407,6 +459,21 @@ class InfiniteCanvasView @JvmOverloads constructor(
                 invalidate()
             }
             MotionEvent.ACTION_MOVE -> {
+                if (isWritingInBlock) {
+                    for (h in 0 until event.historySize) {
+                        val hp = screenToCanvas(event.getHistoricalX(h), event.getHistoricalY(h))
+                        handwritingStrokePoints.add(StrokePoint(
+                            x = hp.x, y = hp.y,
+                            pressure = event.getHistoricalPressure(h),
+                            timestamp = event.getHistoricalEventTime(h)
+                        ))
+                    }
+                    handwritingStrokePoints.add(StrokePoint(
+                        x = canvasPoint.x, y = canvasPoint.y,
+                        pressure = event.pressure,
+                        timestamp = event.eventTime
+                    ))
+                }
                 currentStroke?.let { stroke ->
                     for (h in 0 until event.historySize) {
                         val hp = screenToCanvas(event.getHistoricalX(h), event.getHistoricalY(h))
@@ -429,6 +496,17 @@ class InfiniteCanvasView @JvmOverloads constructor(
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                // If writing in a handwriting block, send points for recognition
+                if (isWritingInBlock && activeHandwritingBlockId != null && handwritingStrokePoints.isNotEmpty()) {
+                    listener?.onHandwritingStrokeInBlock(
+                        activeHandwritingBlockId!!,
+                        ArrayList(handwritingStrokePoints)
+                    )
+                    handwritingStrokePoints.clear()
+                    isWritingInBlock = false
+                    activeHandwritingBlockId = null
+                }
+
                 currentStroke?.let { stroke ->
                     if (!stroke.isEmpty()) {
                         board?.activeLayer?.strokes?.add(stroke)
@@ -781,7 +859,137 @@ class InfiniteCanvasView @JvmOverloads constructor(
                     yOffset += 18f
                 }
             }
+            is com.cnnt.app.data.model.ObjectContent.Handwriting -> {
+                drawHandwritingBlock(canvas, obj, content)
+            }
             else -> {}
+        }
+    }
+
+    private fun drawHandwritingBlock(canvas: Canvas, obj: SpatialObject, content: com.cnnt.app.data.model.ObjectContent.Handwriting) {
+        val rect = RectF(obj.x, obj.y, obj.x + obj.width, obj.y + obj.height)
+
+        // Dark semi-transparent background
+        objPaint.color = 0xCC222222.toInt()
+        objPaint.style = Paint.Style.FILL
+        canvas.drawRoundRect(rect, 6f, 6f, objPaint)
+
+        // Dashed border (blue for active, gray for idle)
+        val isActive = activeHandwritingBlockId == obj.id
+        hwBlockBorderPaint.color = if (isActive) 0xFF00B0FF.toInt() else 0x66AAAAAA.toInt()
+        hwBlockBorderPaint.strokeWidth = if (isActive) 2.5f / scale else 1.5f / scale
+        hwBlockBorderPaint.pathEffect = android.graphics.DashPathEffect(
+            floatArrayOf(8f / scale, 4f / scale), 0f
+        )
+        canvas.drawRoundRect(rect, 6f, 6f, hwBlockBorderPaint)
+
+        val padding = obj.style.padding
+        val textX = obj.x + padding
+        var textY = obj.y + padding + content.fontSize
+
+        if (content.recognizedText.isNotEmpty()) {
+            // Draw recognized text
+            hwTextPaint.color = content.fontColor
+            hwTextPaint.textSize = content.fontSize
+
+            // Word-wrap text within block width
+            val maxWidth = obj.width - padding * 2
+            val words = content.recognizedText.split(" ")
+            var currentLine = StringBuilder()
+            for (word in words) {
+                val testLine = if (currentLine.isEmpty()) word else "$currentLine $word"
+                val textWidth = hwTextPaint.measureText(testLine)
+                if (textWidth > maxWidth && currentLine.isNotEmpty()) {
+                    canvas.drawText(currentLine.toString(), textX, textY, hwTextPaint)
+                    textY += content.fontSize * 1.4f
+                    currentLine = StringBuilder(word)
+                } else {
+                    currentLine = StringBuilder(testLine)
+                }
+            }
+            if (currentLine.isNotEmpty()) {
+                canvas.drawText(currentLine.toString(), textX, textY, hwTextPaint)
+            }
+        } else if (content.isRecognizing) {
+            // Show recognizing indicator
+            hwLabelPaint.color = 0xAAFFCC00.toInt()
+            hwLabelPaint.textSize = 12f / scale.coerceIn(0.3f, 3f)
+            canvas.drawText("Reconhecendo...", textX, textY, hwLabelPaint)
+        } else {
+            // Show placeholder
+            hwLabelPaint.color = 0x66FFFFFF.toInt()
+            hwLabelPaint.textSize = 12f / scale.coerceIn(0.3f, 3f)
+            canvas.drawText("Escreva aqui...", textX, textY, hwLabelPaint)
+        }
+
+        // Resize handles at corners
+        val handleSize = 6f / scale
+        val handlePaintLocal = Paint().apply {
+            color = 0xFF00B0FF.toInt()
+            style = Paint.Style.FILL
+        }
+        // Bottom-right corner (main resize handle)
+        canvas.drawCircle(obj.x + obj.width, obj.y + obj.height, handleSize, handlePaintLocal)
+        // Bottom-left
+        canvas.drawCircle(obj.x, obj.y + obj.height, handleSize * 0.7f, handlePaintLocal)
+    }
+
+    fun addHandwritingBlock(x: Float, y: Float, width: Float = 300f, height: Float = 200f) {
+        val canvasPoint = screenToCanvas(x, y)
+        val obj = SpatialObject(
+            type = com.cnnt.app.data.model.SpatialObjectType.HANDWRITING,
+            x = canvasPoint.x - width / 2f,
+            y = canvasPoint.y - height / 2f,
+            width = width,
+            height = height,
+            content = com.cnnt.app.data.model.ObjectContent.Handwriting(),
+            style = ObjectStyle(
+                backgroundColor = 0x00000000,
+                borderColor = 0xFF00B0FF.toInt(),
+                borderWidth = 2f,
+                cornerRadius = 6f,
+                padding = 10f
+            )
+        )
+        board?.activeLayer?.objects?.add(obj)
+        invalidateCache()
+        invalidate()
+        listener?.onObjectSelected(obj)
+    }
+
+    fun updateHandwritingBlockText(blockId: String, text: String) {
+        val layer = board?.activeLayer ?: return
+        val idx = layer.objects.indexOfFirst { it.id == blockId }
+        if (idx >= 0) {
+            val obj = layer.objects[idx]
+            val content = obj.content
+            if (content is com.cnnt.app.data.model.ObjectContent.Handwriting) {
+                val existingText = content.recognizedText
+                val newText = if (existingText.isEmpty()) text else "$existingText $text"
+                layer.objects[idx] = obj.copy(
+                    content = content.copy(
+                        recognizedText = newText,
+                        isRecognizing = false
+                    )
+                )
+                invalidateCache()
+                invalidate()
+            }
+        }
+    }
+
+    fun setHandwritingBlockRecognizing(blockId: String, recognizing: Boolean) {
+        val layer = board?.activeLayer ?: return
+        val idx = layer.objects.indexOfFirst { it.id == blockId }
+        if (idx >= 0) {
+            val obj = layer.objects[idx]
+            val content = obj.content
+            if (content is com.cnnt.app.data.model.ObjectContent.Handwriting) {
+                layer.objects[idx] = obj.copy(
+                    content = content.copy(isRecognizing = recognizing)
+                )
+                invalidate()
+            }
         }
     }
 

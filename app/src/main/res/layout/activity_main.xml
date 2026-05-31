@@ -333,6 +333,18 @@
             android:gravity="start|center_vertical"
             android:paddingStart="12dp" />
 
+        <Button
+            android:id="@+id/btnInsertHandwriting"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:text="✍ Bloco de Texto (Manuscrito)"
+            android:textSize="12sp"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/btn_tool"
+            android:layout_marginBottom="4dp"
+            android:gravity="start|center_vertical"
+            android:paddingStart="12dp" />
+
     </LinearLayout>
 
 </androidx.drawerlayout.widget.DrawerLayout>

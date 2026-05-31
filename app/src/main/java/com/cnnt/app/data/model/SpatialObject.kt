@@ -21,7 +21,7 @@ data class SpatialObject(
 )
 
 enum class SpatialObjectType {
-    TEXT, CHECKLIST, IMAGE, PDF, LINK, FILE, DRAWING_REGION, FLASHCARD, GROUP
+    TEXT, CHECKLIST, IMAGE, PDF, LINK, FILE, DRAWING_REGION, FLASHCARD, GROUP, HANDWRITING
 }
 
 sealed class ObjectContent {
@@ -35,6 +35,13 @@ sealed class ObjectContent {
     data class DrawingRegion(val strokes: List<Stroke> = emptyList()) : ObjectContent()
     data class FlashcardContent(val flashcardId: String) : ObjectContent()
     data class Group(val childIds: List<String>) : ObjectContent()
+    data class Handwriting(
+        val recognizedText: String = "",
+        val lines: List<String> = emptyList(),
+        val fontSize: Float = 16f,
+        val fontColor: Int = 0xFFFFFFFF.toInt(),
+        val isRecognizing: Boolean = false
+    ) : ObjectContent()
 }
 
 data class ChecklistItem(
