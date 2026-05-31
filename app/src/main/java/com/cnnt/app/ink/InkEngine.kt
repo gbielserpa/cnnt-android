@@ -116,14 +116,16 @@ class InkEngine {
             strokePaint.strokeWidth = max(width, 0.3f)
             canvas.drawLine(prev.x, prev.y, curr.x, curr.y, strokePaint)
 
-            // Grain texture: scatter dots along the stroke
-            val grainCount = (width * 0.8f).toInt().coerceIn(1, 6)
-            fillPaint.color = stroke.color
-            for (g in 0 until grainCount) {
-                val gx = curr.x + (Math.random().toFloat() - 0.5f) * width * 1.5f
-                val gy = curr.y + (Math.random().toFloat() - 0.5f) * width * 1.5f
-                fillPaint.alpha = (alpha * 0.4f * Math.random().toFloat()).toInt().coerceIn(5, 100)
-                canvas.drawCircle(gx, gy, (0.3f + Math.random().toFloat() * 0.5f), fillPaint)
+            // Grain texture: scatter dots (every 3rd point for performance)
+            if (i % 3 == 0) {
+                val grainCount = (width * 0.4f).toInt().coerceIn(1, 3)
+                fillPaint.color = stroke.color
+                for (g in 0 until grainCount) {
+                    val gx = curr.x + (Math.random().toFloat() - 0.5f) * width * 1.5f
+                    val gy = curr.y + (Math.random().toFloat() - 0.5f) * width * 1.5f
+                    fillPaint.alpha = (alpha * 0.4f * Math.random().toFloat()).toInt().coerceIn(5, 100)
+                    canvas.drawCircle(gx, gy, (0.3f + Math.random().toFloat() * 0.5f), fillPaint)
+                }
             }
         }
     }
@@ -251,33 +253,81 @@ class InkEngine {
         }
     }
 
-    // --- CNNT Special: velocity + direction + smooth taper, dynamic ---
+    // --- CNNT Special: direction-based thickness ---
+    // Going DOWN = thick (max width), going UP = thin (min width)
+    // This creates natural handwriting variation like a real fountain pen
     private fun renderCnntSpecial(canvas: Canvas, stroke: Stroke, brush: BrushPreset, points: List<StrokePoint>) {
         val smoothed = smoothPoints(points, 0.5f)
+        if (smoothed.size < 2) return
 
-        strokePaint.strokeCap = Paint.Cap.ROUND
-        strokePaint.maskFilter = null
+        val path = Path()
+        val topEdge = mutableListOf<Pair<Float, Float>>()
+        val bottomEdge = mutableListOf<Pair<Float, Float>>()
 
-        for (i in 1 until smoothed.size) {
-            val prev = smoothed[i - 1]
-            val curr = smoothed[i]
-
+        for (i in smoothed.indices) {
+            val point = smoothed[i]
             val t = i.toFloat() / smoothed.size
             val taper = calculateTaper(t, StrokeBehavior.SMOOTH_TAPER, StrokeBehavior.SMOOTH_TAPER, smoothed.size)
+            val pressure = point.pressure.coerceIn(0.1f, 1f)
 
-            val pressure = curr.pressure.coerceIn(0.1f, 1f)
-            val velocity = calculateVelocity(prev, curr)
-            val velFactor = 1f - (velocity * 0.5f * 0.001f).coerceIn(0f, 0.5f)
-            val direction = atan2((curr.y - prev.y).toDouble(), (curr.x - prev.x).toDouble()).toFloat()
-            val dirFactor = 0.7f + abs(sin(direction)) * 0.3f
+            // Calculate vertical direction: dy > 0 means going DOWN
+            val dy = if (i > 0) smoothed[i].y - smoothed[i - 1].y
+                     else if (smoothed.size > 1) smoothed[1].y - smoothed[0].y else 0f
+            val dx = if (i > 0) smoothed[i].x - smoothed[i - 1].x
+                     else if (smoothed.size > 1) smoothed[1].x - smoothed[0].x else 0f
 
-            val width = stroke.size * pressure * velFactor * dirFactor * taper * 1.3f
+            val segLen = hypot(dx, dy)
+            // Normalized vertical component: 1.0 = pure downward, -1.0 = pure upward
+            val verticalRatio = if (segLen > 0.01f) (dy / segLen) else 0f
 
-            strokePaint.color = stroke.color
-            strokePaint.alpha = (stroke.opacity * 255).toInt()
-            strokePaint.strokeWidth = max(width, 0.5f)
+            // dirFactor: 1.0 when going full down, ~0.15 when going full up
+            val dirFactor = (0.15f + 0.85f * ((verticalRatio + 1f) / 2f)).coerceIn(0.15f, 1f)
 
-            canvas.drawLine(prev.x, prev.y, curr.x, curr.y, strokePaint)
+            val width = stroke.size * pressure * dirFactor * taper * 1.5f
+
+            // Perpendicular to stroke direction
+            val angle = atan2(dy.toDouble(), dx.toDouble()).toFloat()
+            val perpAngle = angle + Math.PI.toFloat() / 2f
+            val halfW = max(width * 0.5f, 0.3f)
+
+            topEdge.add(Pair(
+                point.x + cos(perpAngle) * halfW,
+                point.y + sin(perpAngle) * halfW
+            ))
+            bottomEdge.add(Pair(
+                point.x - cos(perpAngle) * halfW,
+                point.y - sin(perpAngle) * halfW
+            ))
+        }
+
+        if (topEdge.isNotEmpty()) {
+            path.moveTo(topEdge[0].first, topEdge[0].second)
+            for (i in 1 until topEdge.size) {
+                val prev = topEdge[i - 1]
+                val curr = topEdge[i]
+                val cx = (prev.first + curr.first) / 2f
+                val cy = (prev.second + curr.second) / 2f
+                path.quadTo(prev.first, prev.second, cx, cy)
+            }
+            path.lineTo(topEdge.last().first, topEdge.last().second)
+
+            for (i in bottomEdge.indices.reversed()) {
+                val pt = bottomEdge[i]
+                if (i == bottomEdge.size - 1) {
+                    path.lineTo(pt.first, pt.second)
+                } else {
+                    val next = bottomEdge[i + 1]
+                    val cx = (pt.first + next.first) / 2f
+                    val cy = (pt.second + next.second) / 2f
+                    path.quadTo(next.first, next.second, cx, cy)
+                }
+            }
+            path.close()
+
+            fillPaint.color = stroke.color
+            fillPaint.alpha = (stroke.opacity * 255).toInt()
+            fillPaint.maskFilter = null
+            canvas.drawPath(path, fillPaint)
         }
     }
 
@@ -355,19 +405,21 @@ class InkEngine {
 
         // Draw heavy grain/texture
         fillPaint.color = stroke.color
-        for (i in smoothed.indices) {
-            val point = smoothed[i]
+        val grainStep = max(1, smoothed.size / 60)
+        var gi = 0
+        while (gi < smoothed.size) {
+            val point = smoothed[gi]
             val pressure = point.pressure.coerceIn(0.1f, 1f)
             val radius = stroke.size * pressure * 1.5f
-            val particleCount = (radius * 3).toInt().coerceIn(3, 20)
+            val particleCount = (radius * 1.5f).toInt().coerceIn(2, 10)
 
             for (p in 0 until particleCount) {
                 val gx = point.x + (Math.random().toFloat() - 0.5f) * radius * 3f
                 val gy = point.y + (Math.random().toFloat() - 0.5f) * radius * 3f
                 fillPaint.alpha = (stroke.opacity * 80 * Math.random().toFloat()).toInt().coerceIn(10, 120)
-                val dotSize = 0.3f + Math.random().toFloat() * 1.2f
-                canvas.drawCircle(gx, gy, dotSize, fillPaint)
+                canvas.drawCircle(gx, gy, 0.3f + Math.random().toFloat() * 1.0f, fillPaint)
             }
+            gi += grainStep
         }
     }
 
@@ -380,7 +432,7 @@ class InkEngine {
         strokePaint.color = stroke.color
         strokePaint.alpha = (stroke.opacity * 40).toInt()
         strokePaint.strokeWidth = stroke.size * 4f
-        strokePaint.maskFilter = BlurMaskFilter(stroke.size * 2f, BlurMaskFilter.Blur.NORMAL)
+        strokePaint.maskFilter = getCachedBlur(stroke.size * 2f)
 
         val glowPath = Path()
         glowPath.moveTo(smoothed[0].x, smoothed[0].y)
@@ -392,7 +444,7 @@ class InkEngine {
         // Middle glow
         strokePaint.alpha = (stroke.opacity * 100).toInt()
         strokePaint.strokeWidth = stroke.size * 2f
-        strokePaint.maskFilter = BlurMaskFilter(stroke.size, BlurMaskFilter.Blur.NORMAL)
+        strokePaint.maskFilter = getCachedBlur(stroke.size)
         canvas.drawPath(glowPath, strokePaint)
 
         // Bright core (white-ish)
@@ -403,15 +455,19 @@ class InkEngine {
         canvas.drawPath(glowPath, strokePaint)
     }
 
-    // --- Spray/Airbrush: scattered dots, soft cloud ---
+    // --- Spray/Airbrush: scattered dots, soft cloud (optimized) ---
     private fun renderSprayAirbrush(canvas: Canvas, stroke: Stroke, brush: BrushPreset, points: List<StrokePoint>) {
         fillPaint.color = stroke.color
         fillPaint.maskFilter = null
 
-        for (point in points) {
+        // Sample every Nth point to reduce rendering load
+        val step = max(1, points.size / 80)
+        var idx = 0
+        while (idx < points.size) {
+            val point = points[idx]
             val pressure = point.pressure.coerceIn(0.1f, 1f)
             val radius = stroke.size * pressure * 2f
-            val count = (radius * 4).toInt().coerceIn(5, 40)
+            val count = (radius * 1.5f).toInt().coerceIn(3, 15)
 
             for (s in 0 until count) {
                 val angle = Math.random() * Math.PI * 2
@@ -421,9 +477,9 @@ class InkEngine {
 
                 val distFactor = 1f - (dist / radius)
                 fillPaint.alpha = (stroke.opacity * 0.3f * distFactor * 255).toInt().coerceIn(5, 80)
-                val dotSize = 0.4f + Math.random().toFloat() * 0.8f
-                canvas.drawCircle(sx, sy, dotSize, fillPaint)
+                canvas.drawCircle(sx, sy, 0.6f + Math.random().toFloat() * 0.6f, fillPaint)
             }
+            idx += step
         }
     }
 
@@ -464,6 +520,15 @@ class InkEngine {
                 val gy = curr.y + (Math.random().toFloat() - 0.5f) * width * 4
                 canvas.drawCircle(gx, gy, Math.random().toFloat() * 1.5f + 0.3f, fillPaint)
             }
+        }
+    }
+
+    private val blurCache = HashMap<Int, BlurMaskFilter>()
+
+    private fun getCachedBlur(radius: Float): BlurMaskFilter {
+        val key = (radius * 10).toInt()
+        return blurCache.getOrPut(key) {
+            BlurMaskFilter(max(radius, 1f), BlurMaskFilter.Blur.NORMAL)
         }
     }
 

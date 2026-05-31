@@ -302,7 +302,10 @@ class InfiniteCanvasView @JvmOverloads constructor(
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
       try {
-        scaleDetector.onTouchEvent(event)
+        // Don't process scale gestures when stylus button is held (eraser mode)
+        if (!stylusButtonDown) {
+            scaleDetector.onTouchEvent(event)
+        }
         if (isScaling) return true
 
         val toolType = event.getToolType(0)

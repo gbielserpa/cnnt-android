@@ -47,21 +47,20 @@
             android:gravity="center_vertical"
             android:padding="4dp">
 
-            <!-- Brush button -->
+            <!-- Brush button (icon + name) -->
             <Button
                 android:id="@+id/btnBrush"
                 android:layout_width="wrap_content"
                 android:layout_height="36dp"
-                android:minWidth="60dp"
-                android:maxWidth="120dp"
+                android:minWidth="48dp"
                 android:text="Caneta Gel"
-                android:textSize="10sp"
+                android:textSize="11sp"
                 android:textColor="#FFFFFF"
                 android:background="@drawable/btn_tool"
-                android:singleLine="true"
-                android:ellipsize="end"
+                android:drawableStart="@drawable/ic_brush"
+                android:drawablePadding="4dp"
                 android:paddingStart="8dp"
-                android:paddingEnd="8dp"
+                android:paddingEnd="10dp"
                 android:layout_marginEnd="4dp" />
 
             <!-- Color button -->
@@ -75,110 +74,120 @@
             <!-- Size slider -->
             <SeekBar
                 android:id="@+id/sizeSlider"
-                android:layout_width="80dp"
+                android:layout_width="100dp"
                 android:layout_height="32dp"
                 android:max="100"
-                android:progress="20"
+                android:progress="30"
                 android:progressTint="#FFFFFF"
                 android:thumbTint="#00B0FF"
                 android:layout_marginEnd="4dp" />
 
             <!-- Eraser -->
-            <Button
+            <ImageButton
                 android:id="@+id/btnEraser"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:text="⌫"
-                android:textSize="16sp"
-                android:textColor="#FFFFFF"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@drawable/ic_eraser"
                 android:background="@drawable/btn_tool"
+                android:scaleType="centerInside"
+                android:padding="8dp"
+                android:contentDescription="Borracha"
                 android:layout_marginEnd="4dp" />
 
             <!-- Select -->
-            <Button
+            <ImageButton
                 android:id="@+id/btnSelect"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:text="◻"
-                android:textSize="16sp"
-                android:textColor="#FFFFFF"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@drawable/ic_select"
                 android:background="@drawable/btn_tool"
+                android:scaleType="centerInside"
+                android:padding="8dp"
+                android:contentDescription="Selecionar"
                 android:layout_marginEnd="4dp" />
 
             <!-- Lasso -->
-            <Button
+            <ImageButton
                 android:id="@+id/btnLasso"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:text="⭕"
-                android:textSize="12sp"
-                android:textColor="#FFFFFF"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@drawable/ic_lasso"
                 android:background="@drawable/btn_tool"
+                android:scaleType="centerInside"
+                android:padding="8dp"
+                android:contentDescription="Laço"
                 android:layout_marginEnd="4dp" />
 
             <!-- Undo -->
-            <Button
+            <ImageButton
                 android:id="@+id/btnUndo"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:text="↩"
-                android:textSize="16sp"
-                android:textColor="#FFFFFF"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@drawable/ic_undo"
                 android:background="@drawable/btn_tool"
+                android:scaleType="centerInside"
+                android:padding="8dp"
+                android:contentDescription="Desfazer"
                 android:layout_marginEnd="4dp" />
 
             <!-- Redo -->
-            <Button
+            <ImageButton
                 android:id="@+id/btnRedo"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:text="↪"
-                android:textSize="16sp"
-                android:textColor="#FFFFFF"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@drawable/ic_redo"
                 android:background="@drawable/btn_tool"
+                android:scaleType="centerInside"
+                android:padding="8dp"
+                android:contentDescription="Refazer"
                 android:layout_marginEnd="8dp" />
 
             <!-- OCR -->
-            <Button
+            <ImageButton
                 android:id="@+id/btnOcr"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:minWidth="44dp"
-                android:text="OCR"
-                android:textSize="10sp"
-                android:textColor="#FFFFFF"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@drawable/ic_ocr"
                 android:background="@drawable/btn_tool"
+                android:scaleType="centerInside"
+                android:padding="8dp"
+                android:contentDescription="OCR"
                 android:layout_marginEnd="4dp" />
 
             <!-- Flashcard -->
-            <Button
+            <ImageButton
                 android:id="@+id/btnFlashcard"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:text="📇"
-                android:textSize="14sp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@drawable/ic_flashcard"
                 android:background="@drawable/btn_tool"
+                android:scaleType="centerInside"
+                android:padding="8dp"
+                android:contentDescription="Flashcard"
                 android:layout_marginEnd="4dp" />
 
             <!-- Export -->
-            <Button
+            <ImageButton
                 android:id="@+id/btnExport"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:text="📤"
-                android:textSize="14sp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@drawable/ic_export"
                 android:background="@drawable/btn_tool"
+                android:scaleType="centerInside"
+                android:padding="8dp"
+                android:contentDescription="Exportar"
                 android:layout_marginEnd="4dp" />
 
             <!-- Focus mode -->
-            <Button
+            <ImageButton
                 android:id="@+id/btnFocus"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:text="⊙"
-                android:textSize="16sp"
-                android:textColor="#FFFFFF"
-                android:background="@drawable/btn_tool" />
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@drawable/ic_focus"
+                android:background="@drawable/btn_tool"
+                android:scaleType="centerInside"
+                android:padding="8dp"
+                android:contentDescription="Modo Foco" />
 
         </LinearLayout>
         </HorizontalScrollView>

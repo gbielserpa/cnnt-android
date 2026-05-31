@@ -87,7 +87,7 @@ class ToolbarManager(
     private fun setupSizeSlider() {
         binding.sizeSlider.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                val size = 1f + (progress / 100f) * 29f // 1-30
+                val size = 1f + (progress / 100f) * 49f // 1-50
                 onSizeChanged?.invoke(size)
             }
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
@@ -109,8 +109,7 @@ class ToolbarManager(
     }
 
     private fun highlightButton(activeBtn: View) {
-        // Reset all tool buttons
-        listOf(binding.btnEraser, binding.btnSelect, binding.btnLasso).forEach { btn ->
+        listOf<View>(binding.btnEraser, binding.btnSelect, binding.btnLasso).forEach { btn ->
             btn.alpha = if (btn == activeBtn) 1.0f else 0.6f
         }
     }
