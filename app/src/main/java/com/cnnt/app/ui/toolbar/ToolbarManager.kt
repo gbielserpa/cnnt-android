@@ -32,6 +32,7 @@ class ToolbarManager(
     var onBrushSettingsChanged: ((BrushPreset) -> Unit)? = null
 
     private var currentBrush: BrushPreset = BrushPreset.gelPen()
+    private var currentColor: Int = Color.WHITE
     private var lastLassoMode: LassoMode = LassoMode.FREE
 
     init {
@@ -48,8 +49,10 @@ class ToolbarManager(
         }
 
         binding.btnColor.setOnClickListener {
-            ColorPickerDialog(activity) { color ->
+            ColorPickerDialog(activity, currentColor) { color ->
+                currentColor = color
                 onColorSelected?.invoke(color)
+                updateColorIndicator(color)
             }.show()
         }
 

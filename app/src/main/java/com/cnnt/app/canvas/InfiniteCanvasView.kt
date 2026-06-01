@@ -101,13 +101,13 @@ class InfiniteCanvasView @JvmOverloads constructor(
 
     // Background
     private val bgPaint = Paint().apply {
-        color = 0xFF1E1E1E.toInt()
+        color = 0xFF141414.toInt()
         style = Paint.Style.FILL
     }
 
     // Grid paint (subtle)
     private val gridPaint = Paint().apply {
-        color = 0x11FFFFFF
+        color = 0x0DFFFFFF
         style = Paint.Style.STROKE
         strokeWidth = 0.5f
     }
