@@ -1,0 +1,12 @@
+﻿CNNT - Pasta unificada
+
+Conteudo:
+- app-debug.apk -> APK pronto para instalar
+- projeto\ -> copia do projeto Android necessaria para abrir no Android Studio / rebuildar
+- TEST_PLAN.md -> plano de testes
+- CHANGELOG_v0.3.md -> resumo da versao
+
+Observacoes:
+- Esta copia nao inclui .git nem caches de build pesados.
+- Se quiser rebuildar no Android Studio, talvez seja preciso recriar local.properties com o caminho do Android SDK.
+- Para instalar no tablet, use o app-debug.apk da raiz desta pasta.
